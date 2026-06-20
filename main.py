@@ -9,10 +9,33 @@ import m365_integration
 from datetime import datetime
 from pydantic import BaseModel
 from sqlalchemy import or_, func
+from contextlib import asynccontextmanager
+import seed_norms
 
-Base.metadata.create_all(bind=engine)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    try:
+        if not db.query(models.Master).first():
+            db.add(models.Master(name="Бекбосынов", pin="1234", role="master"))
+            db.add(models.Master(name="Оператор ЗО", pin="2222", role="zo"))
+            db.add(models.Master(name="Машинист ЛФМ", pin="3333", role="lfm"))
+            db.add(models.Master(name="Стакер", pin="4444", role="stacker"))
+            db.add(models.Master(name="Дестакер", pin="5555", role="destacker"))
+            db.add(models.Master(name="Инспектор СКК", pin="6666", role="qcd"))
+            db.add(models.Master(name="Механик", pin="8888", role="mechanic"))
+            db.commit()
+        if not db.query(models.Master).filter(models.Master.role == "director").first():
+            db.add(models.Master(name="Директор", pin="7777", role="director"))
+            db.commit()
+    finally:
+        db.close()
+    
+    seed_norms.seed_norms()
+    yield
 
-app = FastAPI(title="Tectum Enterprise Portal")
+app = FastAPI(title="Tectum Enterprise Portal", lifespan=lifespan)
 
 TONS_PER_HOUR = 5.0
 PRICE_PER_TON = 100000.0
