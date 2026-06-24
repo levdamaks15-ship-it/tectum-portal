@@ -19,6 +19,10 @@ class Shift(Base):
     line = Column(String) # "Линия 1", "Линия 2"
     status = Column(String, default="active") # active, closed
     
+    # План
+    plan_sheets = Column(Integer, default=0)
+    plan_tons = Column(Float, default=0.0)
+    
     # --- 1. Склад (Приход сырья) ---
     receipt_chrysotile_4_20 = Column(Float, default=0.0)
     receipt_chrysotile_5_65 = Column(Float, default=0.0)
@@ -28,6 +32,7 @@ class Shift(Base):
     receipt_crushed_slate = Column(Float, default=0)
     receipt_asbozurit = Column(Float, default=0)
     receipt_fiberglass = Column(Float, default=0)
+    receipt_laprol = Column(Float, default=0)
     
     # ЗО ФАКТ РАСХОД
     zo_chrysotile_4_20 = Column(Float, default=0)
@@ -43,6 +48,8 @@ class Shift(Base):
     zo_asbozurit = Column(Float, default=0)
     zo_fiberglass = Column(Float, default=0)
     zo_laprol = Column(Float, default=0)
+    zo_asb_drain = Column(Float, default=0)
+    zo_cem_drain = Column(Float, default=0)
     zo_batches = Column(Integer, default=0)
     
     zo_submitted = Column(Boolean, default=False)
@@ -77,6 +84,9 @@ class LFMReport(Base):
     product_name = Column(String)
     lfm_sheets = Column(Integer)
     lfm_wind_resets = Column(Integer)
+    formed_1st_grade = Column(Integer, default=0)
+    formed_defect = Column(Integer, default=0)
+    transferred_to_warehouse = Column(Integer, default=0)
     
     shift = relationship("Shift", back_populates="lfm_reports")
 
@@ -130,3 +140,18 @@ class ProductNorm(Base):
     norm_crushed_slate = Column(Float, default=0.0)
     norm_asbozurit = Column(Float, default=0.0)
     norm_fiberglass = Column(Float, default=0.0)
+
+class MonthlyPlanBoard(Base):
+    __tablename__ = "monthly_plan_board"
+    id = Column(Integer, primary_key=True, index=True)
+    date = Column(Date, index=True)
+    shift_name = Column(String) # "День", "Ночь"
+    master_id = Column(Integer, ForeignKey("masters.id"))
+    shift_number = Column(Integer) # Смена из Excel
+    line = Column(String) # "ЛФМ-1" или "ЛФМ-2"
+    plan_sheets = Column(Integer, default=0)
+    fact_sheets = Column(Integer, default=0)
+    first_grade = Column(Integer, default=0)
+    defect = Column(Integer, default=0)
+
+    master = relationship("Master")

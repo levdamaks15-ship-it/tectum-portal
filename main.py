@@ -12,14 +12,33 @@ from sqlalchemy import or_, func
 from contextlib import asynccontextmanager
 import seed_norms
 import calendar
+from datetime import timedelta
 import openpyxl
 from openpyxl.chart import BarChart, Reference
 import io
 from fastapi import Response
+from urllib.parse import quote
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
+    
+    # SQLite alter table hack to auto-add columns if they don't exist
+    import sqlite3
+    try:
+        conn = sqlite3.connect("tectum.db")
+        conn.execute("ALTER TABLE monthly_plan_board ADD COLUMN first_grade INTEGER DEFAULT 0")
+        conn.commit()
+        conn.close()
+    except: pass
+    
+    try:
+        conn = sqlite3.connect("tectum.db")
+        conn.execute("ALTER TABLE monthly_plan_board ADD COLUMN defect INTEGER DEFAULT 0")
+        conn.commit()
+        conn.close()
+    except: pass
+    
     db = SessionLocal()
     try:
         if not db.query(models.Master).first():
@@ -33,6 +52,9 @@ async def lifespan(app: FastAPI):
             db.commit()
         if not db.query(models.Master).filter(models.Master.role == "director").first():
             db.add(models.Master(name="Директор", pin="7777", role="director"))
+            db.commit()
+        if not db.query(models.Master).filter(models.Master.role == "admin").first():
+            db.add(models.Master(name="Админ", pin="0000", role="admin"))
             db.commit()
     finally:
         db.close()
@@ -139,6 +161,8 @@ class UpdateReceiptZO(BaseModel):
     asbozurit: float = 0
     fiberglass: float = 0
     laprol: float = 0
+    asb_drain: float = 0
+    cem_drain: float = 0
     batches: int = 0
     submitted: bool = False
 
@@ -154,6 +178,7 @@ def update_receipt(shift_id: int, data: UpdateReceiptZO, db: Session = Depends(g
     shift.receipt_crushed_slate = data.crushed_slate
     shift.receipt_asbozurit = data.asbozurit
     shift.receipt_fiberglass = data.fiberglass
+    shift.receipt_laprol = data.laprol
     db.commit()
     return {"status": "ok"}
 
@@ -178,6 +203,8 @@ def update_zo(shift_id: int, data: UpdateReceiptZO, db: Session = Depends(get_db
     shift.zo_asbozurit = data.asbozurit
     shift.zo_fiberglass = data.fiberglass
     shift.zo_laprol = data.laprol
+    shift.zo_asb_drain = data.asb_drain
+    shift.zo_cem_drain = data.cem_drain
     shift.zo_batches = data.batches
     
     shift.zo_submitted = data.submitted
@@ -484,63 +511,105 @@ def get_product_raw_weight_kg(db: Session, product_name: str) -> float:
         (norm.norm_fiberglass or 0)
     )
 
+def get_shift_plan(db: Session, shift: models.Shift) -> int:
+    base_plan = shift.plan_sheets if shift.plan_sheets and shift.plan_sheets > 0 else (2500 if shift.shift_name == "День" else 3100)
+    sanitary_downtime = 0
+    for dt in shift.downtimes:
+        if dt.category == "Санитарный день":
+            sanitary_downtime += dt.duration or 0
+    
+    if sanitary_downtime > 0:
+        ratio = max(0, 720 - sanitary_downtime) / 720.0
+        return int(base_plan * ratio)
+    return base_plan
+
 @app.get("/api/dashboard/daily_report")
-def get_daily_report(month: str, line: str = None, db: Session = Depends(get_db)):
+def get_daily_report(start_date: str, line: str = None, db: Session = Depends(get_db)):
     try:
-        y, m = map(int, month.split('-'))
-        num_days = calendar.monthrange(y, m)[1]
+        sd = datetime.strptime(start_date, "%Y-%m-%d").date()
     except:
-        raise HTTPException(400, "Invalid month format")
+        raise HTTPException(400, "Invalid date format")
         
-    month_start = datetime(y, m, 1).date()
-    month_end = datetime(y, m, num_days).date()
+    num_days = 7
+    ed = sd + timedelta(days=num_days - 1)
+    
     shifts = db.query(models.Shift).filter(
-        models.Shift.date >= month_start,
-        models.Shift.date <= month_end
+        models.Shift.date >= sd,
+        models.Shift.date <= ed
+    ).all()
+    
+    plan_boards = db.query(models.MonthlyPlanBoard).filter(
+        models.MonthlyPlanBoard.date >= sd,
+        models.MonthlyPlanBoard.date <= ed
     ).all()
     
     data = {
-        "line_1": {str(d): {"День": {"sheets": 0, "tons": 0.0, "plan_sheets": 2700, "plan_tons": 2700*19.6/1000}, "Ночь": {"sheets": 0, "tons": 0.0, "plan_sheets": 3300, "plan_tons": 3300*19.6/1000}} for d in range(1, num_days + 1)},
-        "line_2": {str(d): {"День": {"sheets": 0, "tons": 0.0, "plan_sheets": 2700, "plan_tons": 2700*19.6/1000}, "Ночь": {"sheets": 0, "tons": 0.0, "plan_sheets": 3300, "plan_tons": 3300*19.6/1000}} for d in range(1, num_days + 1)}
+        "line_1": {str(sd + timedelta(days=i)): {"День": {"sheets": 0, "tons": 0.0, "plan_sheets": 0, "plan_tons": 0.0, "first_grade": 0, "defect": 0}, "Ночь": {"sheets": 0, "tons": 0.0, "plan_sheets": 0, "plan_tons": 0.0, "first_grade": 0, "defect": 0}} for i in range(num_days)},
+        "line_2": {str(sd + timedelta(days=i)): {"День": {"sheets": 0, "tons": 0.0, "plan_sheets": 0, "plan_tons": 0.0, "first_grade": 0, "defect": 0}, "Ночь": {"sheets": 0, "tons": 0.0, "plan_sheets": 0, "plan_tons": 0.0, "first_grade": 0, "defect": 0}} for i in range(num_days)}
     }
     
+    for pb in plan_boards:
+        day_key = str(pb.date)
+        line_key = "line_1" if pb.line == "ЛФМ-1" else "line_2"
+        s_name = pb.shift_name
+        if day_key in data[line_key] and s_name in ["День", "Ночь"]:
+            data[line_key][day_key][s_name]["plan_sheets"] = pb.plan_sheets or 0
+            data[line_key][day_key][s_name]["sheets"] = pb.fact_sheets or 0
+            data[line_key][day_key][s_name]["plan_tons"] = (pb.plan_sheets or 0) * 19.6 / 1000.0
+            data[line_key][day_key][s_name]["tons"] = (pb.fact_sheets or 0) * 19.6 / 1000.0
+            data[line_key][day_key][s_name]["first_grade"] = pb.first_grade or 0
+            data[line_key][day_key][s_name]["defect"] = pb.defect or 0
+            
     for s in shifts:
         if not s.date: continue
-        day = str(s.date.day)
+        day_key = str(s.date)
         line_key = "line_1" if "1" in s.line else "line_2"
         s_name = "День" if s.shift_name == "День" else "Ночь"
         
+        if day_key not in data[line_key]:
+            continue
+            
         total_w = 0
         total_s = 0
         for r in s.lfm_reports:
             w_kg = get_product_finished_weight_kg(db, r.product_name)
-            data[line_key][day][s_name]["sheets"] += r.lfm_sheets
-            data[line_key][day][s_name]["tons"] += (r.lfm_sheets * w_kg) / 1000.0
+            data[line_key][day_key][s_name]["first_grade"] += (r.formed_1st_grade or 0)
+            data[line_key][day_key][s_name]["defect"] += (r.formed_defect or 0)
             total_w += w_kg * r.lfm_sheets
             total_s += r.lfm_sheets
             
         if total_s > 0:
+            # Если есть введенные данные в систему, они приоритетнее или дополняют
+            if data[line_key][day_key][s_name]["sheets"] == 0:
+                data[line_key][day_key][s_name]["sheets"] = total_s
             avg_w = total_w / total_s
-            data[line_key][day][s_name]["plan_tons"] = data[line_key][day][s_name]["plan_sheets"] * avg_w / 1000.0
+            data[line_key][day_key][s_name]["plan_tons"] = data[line_key][day_key][s_name]["plan_sheets"] * avg_w / 1000.0
+            data[line_key][day_key][s_name]["tons"] = data[line_key][day_key][s_name]["sheets"] * avg_w / 1000.0
             
     return {
         "days": num_days,
+        "start_date": str(sd),
         "data": data
     }
 
 @app.get("/api/dashboard/export_daily_report")
-def export_daily_report(month: str, line: str = None, db: Session = Depends(get_db)):
+def export_daily_report(start_date: str, line: str = None, db: Session = Depends(get_db)):
     try:
-        y, m = map(int, month.split('-'))
-        num_days = calendar.monthrange(y, m)[1]
+        sd = datetime.strptime(start_date, "%Y-%m-%d").date()
     except:
-        raise HTTPException(400, "Invalid month format")
+        raise HTTPException(400, "Invalid date format")
         
-    month_start = datetime(y, m, 1).date()
-    month_end = datetime(y, m, num_days).date()
+    num_days = 14
+    ed = sd + timedelta(days=num_days - 1)
+    
     shifts = db.query(models.Shift).filter(
-        models.Shift.date >= month_start,
-        models.Shift.date <= month_end
+        models.Shift.date >= sd,
+        models.Shift.date <= ed
+    ).all()
+    
+    plan_boards = db.query(models.MonthlyPlanBoard).filter(
+        models.MonthlyPlanBoard.date >= sd,
+        models.MonthlyPlanBoard.date <= ed
     ).all()
     
     wb = openpyxl.Workbook()
@@ -554,61 +623,101 @@ def export_daily_report(month: str, line: str = None, db: Session = Depends(get_
         
     for line_id, line_label in lines_to_export:
         ws = wb.create_sheet(title=line_label)
-        ws.append(["День", "Смена", "План (Листы)", "Факт (Листы)", "План (Тонны)", "Факт (Тонны)"])
+        ws.append(["Дата", "Смена", "План (Листы)", "Факт (Листы)", "План (Тонны)", "Факт (Тонны)", "1-й сорт", "Брак"])
         
-        day_data = {d: {
-            "День": {"sheets": 0, "tons": 0.0, "plan_sheets": 2700, "plan_tons": 2700*19.6/1000}, 
-            "Ночь": {"sheets": 0, "tons": 0.0, "plan_sheets": 3300, "plan_tons": 3300*19.6/1000}
-        } for d in range(1, num_days + 1)}
+        ws.column_dimensions['A'].width = 12
+        ws.column_dimensions['B'].width = 8
+        ws.column_dimensions['C'].width = 16
+        ws.column_dimensions['D'].width = 16
+        ws.column_dimensions['E'].width = 16
+        ws.column_dimensions['F'].width = 16
+        ws.column_dimensions['G'].width = 12
+        ws.column_dimensions['H'].width = 12
+        
+        day_data = {str(sd + timedelta(days=i)): {
+            "День": {"sheets": 0, "tons": 0.0, "plan_sheets": 0, "plan_tons": 0.0, "first_grade": 0, "defect": 0}, 
+            "Ночь": {"sheets": 0, "tons": 0.0, "plan_sheets": 0, "plan_tons": 0.0, "first_grade": 0, "defect": 0}
+        } for i in range(num_days)}
+        
+        for pb in plan_boards:
+            if pb.line != line_label: continue
+            day_key = str(pb.date)
+            s_name = pb.shift_name
+            if day_key in day_data and s_name in ["День", "Ночь"]:
+                day_data[day_key][s_name]["plan_sheets"] = pb.plan_sheets or 0
+                day_data[day_key][s_name]["sheets"] = pb.fact_sheets or 0
+                day_data[day_key][s_name]["plan_tons"] = (pb.plan_sheets or 0) * 19.6 / 1000.0
+                day_data[day_key][s_name]["tons"] = (pb.fact_sheets or 0) * 19.6 / 1000.0
+                day_data[day_key][s_name]["first_grade"] = pb.first_grade or 0
+                day_data[day_key][s_name]["defect"] = pb.defect or 0
         
         for s in shifts:
             if not s.date or s.line != line_id: continue
-            day = s.date.day
+            day_key = str(s.date)
+            if day_key not in day_data: continue
+            
             s_name = "День" if s.shift_name == "День" else "Ночь"
             
             total_w = 0
             total_s = 0
             for r in s.lfm_reports:
                 w_kg = get_product_finished_weight_kg(db, r.product_name)
-                day_data[day][s_name]["sheets"] += r.lfm_sheets
-                day_data[day][s_name]["tons"] += (r.lfm_sheets * w_kg) / 1000.0
                 total_w += w_kg * r.lfm_sheets
                 total_s += r.lfm_sheets
                 
             if total_s > 0:
+                if day_data[day_key][s_name]["sheets"] == 0:
+                    day_data[day_key][s_name]["sheets"] = total_s
                 avg_w = total_w / total_s
-                day_data[day][s_name]["plan_tons"] = day_data[day][s_name]["plan_sheets"] * avg_w / 1000.0
+                day_data[day_key][s_name]["plan_tons"] = day_data[day_key][s_name]["plan_sheets"] * avg_w / 1000.0
+                day_data[day_key][s_name]["tons"] = day_data[day_key][s_name]["sheets"] * avg_w / 1000.0
                 
         row_idx = 2
-        for d in range(1, num_days + 1):
-            ws.append([d, "День", day_data[d]["День"]["plan_sheets"], day_data[d]["День"]["sheets"], round(day_data[d]["День"]["plan_tons"], 2), round(day_data[d]["День"]["tons"], 2)])
-            ws.append([d, "Ночь", day_data[d]["Ночь"]["plan_sheets"], day_data[d]["Ночь"]["sheets"], round(day_data[d]["Ночь"]["plan_tons"], 2), round(day_data[d]["Ночь"]["tons"], 2)])
+        for i in range(num_days):
+            d_str = str(sd + timedelta(days=i))
+            ws.append([d_str, "День", day_data[d_str]["День"]["plan_sheets"], day_data[d_str]["День"]["sheets"], round(day_data[d_str]["День"]["plan_tons"], 2), round(day_data[d_str]["День"]["tons"], 2), day_data[d_str]["День"]["first_grade"], day_data[d_str]["День"]["defect"]])
+            ws.append([d_str, "Ночь", day_data[d_str]["Ночь"]["plan_sheets"], day_data[d_str]["Ночь"]["sheets"], round(day_data[d_str]["Ночь"]["plan_tons"], 2), round(day_data[d_str]["Ночь"]["tons"], 2), day_data[d_str]["Ночь"]["first_grade"], day_data[d_str]["Ночь"]["defect"]])
             row_idx += 2
             
-        chart = BarChart()
-        chart.type = "col"
-        chart.style = 10
-        chart.title = f"Выработка {line_label} ({month})"
-        chart.y_axis.title = 'Количество / Вес'
-        chart.x_axis.title = 'День месяца'
+        chart_sheets = BarChart()
+        chart_sheets.type = "col"
+        chart_sheets.style = 10
+        chart_sheets.title = f"Выработка {line_label} (Листы)"
+        chart_sheets.y_axis.title = 'Количество (Листы)'
+        chart_sheets.x_axis.title = 'Дата / Смена'
         
-        data = Reference(ws, min_col=3, min_row=1, max_row=row_idx-1, max_col=6)
-        cats = Reference(ws, min_col=1, min_row=2, max_row=row_idx-1)
+        data_sheets = Reference(ws, min_col=3, min_row=1, max_row=row_idx-1, max_col=4)
+        cats = Reference(ws, min_col=1, min_row=2, max_row=row_idx-1, max_col=2)
         
-        chart.add_data(data, titles_from_data=True)
-        chart.set_categories(cats)
-        chart.shape = 4
+        chart_sheets.add_data(data_sheets, titles_from_data=True)
+        chart_sheets.set_categories(cats)
+        chart_sheets.width = 20
         
-        ws.add_chart(chart, "H2")
+        ws.add_chart(chart_sheets, "H2")
+        
+        chart_tons = BarChart()
+        chart_tons.type = "col"
+        chart_tons.style = 10
+        chart_tons.title = f"Выработка {line_label} (Тонны)"
+        chart_tons.y_axis.title = 'Вес (Тонны)'
+        chart_tons.x_axis.title = 'Дата / Смена'
+        
+        data_tons = Reference(ws, min_col=5, min_row=1, max_row=row_idx-1, max_col=6)
+        
+        chart_tons.add_data(data_tons, titles_from_data=True)
+        chart_tons.set_categories(cats)
+        chart_tons.width = 20
+        
+        ws.add_chart(chart_tons, "H18")
         
     out = io.BytesIO()
     wb.save(out)
-    out.seek(0)
     
+    filename = f"report_{start_date}_{line or 'all'}.xlsx"
     headers = {
-        'Content-Disposition': f'attachment; filename="report_{month}_{line or "all"}.xlsx"'
+        'Content-Disposition': f'attachment; filename="{filename}"'
     }
-    return Response(content=out.read(), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers=headers)
+    return Response(content=out.getvalue(), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers=headers)
 
 @app.get("/api/dashboard/shift_board")
 def get_shift_board(month: str, db: Session = Depends(get_db)):
@@ -639,7 +748,7 @@ def get_shift_board(month: str, db: Session = Depends(get_db)):
             total_s += r.lfm_sheets
             total_w += r.lfm_sheets * w_kg
             
-        plan_sheets = 2700 if s.shift_name == "День" else 3300
+        plan_sheets = get_shift_plan(db, s)
         plan_tons = (plan_sheets * 19.6) / 1000.0
         if total_s > 0:
             avg_w = total_w / total_s
@@ -677,11 +786,15 @@ def export_shift(shift_id: int, db: Session = Depends(get_db)):
     ws.append([])
     
     ws.append(["Продукция", "План", "Факт", "Ед. изм."])
+    ws.column_dimensions['A'].width = 20
+    ws.column_dimensions['B'].width = 12
+    ws.column_dimensions['C'].width = 12
+    ws.column_dimensions['D'].width = 12
     
     total_sheets = sum(r.lfm_sheets for r in shift.lfm_reports)
     total_tons = sum(r.lfm_sheets * get_product_finished_weight_kg(db, r.product_name) / 1000.0 for r in shift.lfm_reports)
     
-    plan_sheets = 2700 if shift.shift_name == "День" else 3300
+    plan_sheets = get_shift_plan(db, shift)
     plan_tons = plan_sheets * (total_tons / total_sheets if total_sheets > 0 else 19.6/1000)
     
     ws.append(["Вся продукция", plan_sheets, total_sheets, "Листы"])
@@ -689,8 +802,9 @@ def export_shift(shift_id: int, db: Session = Depends(get_db)):
     
     out = io.BytesIO()
     wb.save(out)
-    out.seek(0)
-    return Response(content=out.read(), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={'Content-Disposition': f'attachment; filename="shift_{shift_id}.xlsx"'})
+    
+    filename = f"shift_{shift_id}.xlsx"
+    return Response(content=out.getvalue(), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={'Content-Disposition': f'attachment; filename="{filename}"'})
 
 @app.get("/api/dashboard/export_week")
 def export_week(start_date: str, db: Session = Depends(get_db)):
@@ -713,18 +827,123 @@ def export_week(start_date: str, db: Session = Depends(get_db)):
     ws.append([f"Отчет за неделю с {sd} по {ed}"])
     ws.append(["Дата", "Смена", "Мастер", "Линия", "План (Листы)", "Факт (Листы)", "План (Тонны)", "Факт (Тонны)"])
     
+    ws.column_dimensions['A'].width = 12
+    ws.column_dimensions['B'].width = 8
+    ws.column_dimensions['C'].width = 20
+    ws.column_dimensions['D'].width = 10
+    ws.column_dimensions['E'].width = 15
+    ws.column_dimensions['F'].width = 15
+    ws.column_dimensions['G'].width = 15
+    ws.column_dimensions['H'].width = 15
+    
+    plan_boards = db.query(models.MonthlyPlanBoard).filter(
+        models.MonthlyPlanBoard.date >= sd,
+        models.MonthlyPlanBoard.date <= ed
+    ).all()
+    pb_dict = {(pb.date, pb.shift_name, pb.line): pb for pb in plan_boards}
+
     for s in shifts:
-        total_sheets = sum(r.lfm_sheets for r in s.lfm_reports)
-        total_tons = sum(r.lfm_sheets * get_product_finished_weight_kg(db, r.product_name) / 1000.0 for r in s.lfm_reports)
-        plan_sheets = 2700 if s.shift_name == "День" else 3300
-        plan_tons = plan_sheets * (total_tons / total_sheets if total_sheets > 0 else 19.6/1000)
+        pb_line = s.line.replace("Линия ", "ЛФМ-") if s.line else "ЛФМ-1"
+        pb = pb_dict.get((s.date, s.shift_name, pb_line))
         
-        ws.append([str(s.date), s.shift_name, s.master_name or "Н/Д", s.line, plan_sheets, total_sheets, round(plan_tons, 2), round(total_tons, 2)])
+        plan_sheets = pb.plan_sheets if pb else 0
+        total_sheets = pb.fact_sheets if pb else 0
         
+        sum_lfm_sheets = sum(r.lfm_sheets for r in s.lfm_reports)
+        sum_lfm_tons = sum(r.lfm_sheets * get_product_finished_weight_kg(db, r.product_name) / 1000.0 for r in s.lfm_reports)
+        avg_w = (sum_lfm_tons / sum_lfm_sheets) if sum_lfm_sheets > 0 else (19.6/1000)
+        
+        plan_tons = plan_sheets * avg_w
+        total_tons = total_sheets * avg_w
+        
+        ws.append([str(s.date), s.shift_name, s.master.name if s.master else "Н/Д", s.line, plan_sheets, total_sheets, round(plan_tons, 2), round(total_tons, 2)])
     out = io.BytesIO()
     wb.save(out)
-    out.seek(0)
-    return Response(content=out.read(), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={'Content-Disposition': f'attachment; filename="week_{sd}.xlsx"'})
+    
+    filename = f"week_{sd}.xlsx"
+    return Response(content=out.getvalue(), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={'Content-Disposition': f'attachment; filename="{filename}"'})
+
+@app.get("/api/dashboard/weekly")
+def get_weekly_json(start_date: str, db: Session = Depends(get_db)):
+    try:
+        sd = datetime.strptime(start_date, "%Y-%m-%d").date()
+    except:
+        raise HTTPException(400, "Invalid date format, use YYYY-MM-DD")
+        
+    ed = sd + timedelta(days=6)
+    
+    shifts = db.query(models.Shift).filter(
+        models.Shift.date >= sd,
+        models.Shift.date <= ed
+    ).order_by(models.Shift.date, models.Shift.id).all()
+    
+    plan_boards = db.query(models.MonthlyPlanBoard).filter(
+        models.MonthlyPlanBoard.date >= sd,
+        models.MonthlyPlanBoard.date <= ed
+    ).all()
+    pb_dict = {(pb.date, pb.shift_name, pb.line): pb for pb in plan_boards}
+    
+    data = []
+    for s in shifts:
+        pb_line = s.line.replace("Линия ", "ЛФМ-") if s.line else "ЛФМ-1"
+        pb = pb_dict.get((s.date, s.shift_name, pb_line))
+        
+        plan_sheets = pb.plan_sheets if pb else 0
+        total_sheets = pb.fact_sheets if pb else 0
+        
+        sum_lfm_sheets = sum(r.lfm_sheets for r in s.lfm_reports)
+        sum_lfm_tons = sum(r.lfm_sheets * get_product_finished_weight_kg(db, r.product_name) / 1000.0 for r in s.lfm_reports)
+        avg_w = (sum_lfm_tons / sum_lfm_sheets) if sum_lfm_sheets > 0 else (19.6/1000)
+        
+        if total_sheets == 0 and sum_lfm_sheets > 0:
+            total_sheets = sum_lfm_sheets
+            
+        plan_tons = plan_sheets * avg_w
+        total_tons = total_sheets * avg_w
+        
+        # Calculate quality (ds_defect, qcd_defect)
+        if pb and (pb.first_grade or pb.defect):
+            ds_first = pb.first_grade
+            ds_defect = pb.defect
+        else:
+            ds_first = sum(b.ds_first_grade for b in s.batches)
+            ds_defect = sum(b.ds_defect for b in s.batches)
+            
+        qcd_first = sum(b.qcd_first_grade for b in s.batches)
+        qcd_defect = sum(b.qcd_defect for b in s.batches)
+        
+        # Determine the most severe downtime
+        sanitary_note = ""
+        for dt in s.downtimes:
+            if dt.category == "Санитарный день":
+                sanitary_note = "Санитарный день"
+                if dt.duration:
+                    sanitary_note += f" ({dt.duration} мин)"
+                break
+        
+        data.append({
+            "id": s.id,
+            "date": str(s.date),
+            "shift_name": s.shift_name,
+            "master": s.master.name if s.master else "Н/Д",
+            "line": s.line,
+            "plan_sheets": plan_sheets,
+            "fact_sheets": total_sheets,
+            "plan_tons": round(plan_tons, 2),
+            "fact_tons": round(total_tons, 2),
+            "ds_first_grade": ds_first,
+            "ds_defect": ds_defect,
+            "qcd_first_grade": qcd_first,
+            "qcd_defect": qcd_defect,
+            "note": sanitary_note
+        })
+        
+    return {
+        "start_date": str(sd),
+        "end_date": str(ed),
+        "data": data
+    }
+
 
 @app.get("/api/shifts/{shift_id}/materials_report", response_model=schemas.RawMaterialReport)
 def get_materials_report(shift_id: int, db: Session = Depends(get_db)):
@@ -789,3 +1008,212 @@ def get_materials_report(shift_id: int, db: Session = Depends(get_db)):
         "total_deviation_kg": round(total_dev, 2),
         "details": details
     }
+
+
+# --- ADMIN PANEL ENDPOINTS ---
+
+@app.get("/admin")
+def read_admin():
+    return FileResponse("static/admin.html")
+
+@app.post("/api/admin/masters/", response_model=schemas.Master)
+def create_master(master: schemas.MasterCreate, db: Session = Depends(get_db)):
+    db_master = models.Master(**master.model_dump())
+    db.add(db_master)
+    db.commit()
+    db.refresh(db_master)
+    return db_master
+
+@app.put("/api/admin/masters/{master_id}", response_model=schemas.Master)
+def update_master(master_id: int, master: schemas.MasterUpdate, db: Session = Depends(get_db)):
+    db_master = db.query(models.Master).get(master_id)
+    if not db_master: raise HTTPException(404)
+    update_data = master.model_dump(exclude_unset=True)
+    for key, val in update_data.items():
+        setattr(db_master, key, val)
+    db.commit()
+    db.refresh(db_master)
+    return db_master
+
+@app.delete("/api/admin/masters/{master_id}")
+def delete_master(master_id: int, db: Session = Depends(get_db)):
+    db_master = db.query(models.Master).get(master_id)
+    if not db_master: raise HTTPException(404)
+    db.delete(db_master)
+    db.commit()
+    return {"status": "ok"}
+
+@app.post("/api/admin/norms/", response_model=schemas.ProductNorm)
+def create_norm(norm: schemas.ProductNormCreate, db: Session = Depends(get_db)):
+    db_norm = models.ProductNorm(**norm.model_dump())
+    db.add(db_norm)
+    db.commit()
+    db.refresh(db_norm)
+    return db_norm
+
+@app.put("/api/admin/norms/{norm_id}", response_model=schemas.ProductNorm)
+def update_norm(norm_id: int, norm: schemas.ProductNormUpdate, db: Session = Depends(get_db)):
+    db_norm = db.query(models.ProductNorm).get(norm_id)
+    if not db_norm: raise HTTPException(404)
+    update_data = norm.model_dump(exclude_unset=True)
+    for key, val in update_data.items():
+        setattr(db_norm, key, val)
+    db.commit()
+    db.refresh(db_norm)
+    return db_norm
+
+@app.delete("/api/admin/norms/{norm_id}")
+def delete_norm(norm_id: int, db: Session = Depends(get_db)):
+    db_norm = db.query(models.ProductNorm).get(norm_id)
+    if not db_norm: raise HTTPException(404)
+    db.delete(db_norm)
+    db.commit()
+    return {"status": "ok"}
+
+@app.post("/api/admin/clear_data/")
+def clear_operational_data(db: Session = Depends(get_db)):
+    try:
+        deleted_batches = db.query(models.Batch).delete()
+        deleted_lfm = db.query(models.LFMReport).delete()
+        deleted_downtime = db.query(models.Downtime).delete()
+        deleted_shifts = db.query(models.Shift).delete()
+        deleted_plan_board = db.query(models.MonthlyPlanBoard).delete()
+        db.commit()
+        return {
+            "status": "ok",
+            "deleted": {
+                "batches": deleted_batches,
+                "lfm_reports": deleted_lfm,
+                "downtimes": deleted_downtime,
+                "shifts": deleted_shifts,
+                "plan_board": deleted_plan_board
+            }
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(500, str(e))
+
+# --- MONTHLY PLAN BOARD ---
+@app.get("/api/plan_board", response_model=list[schemas.MonthlyPlanBoard])
+def get_plan_board(db: Session = Depends(get_db)):
+    return db.query(models.MonthlyPlanBoard).order_by(models.MonthlyPlanBoard.date.desc(), models.MonthlyPlanBoard.shift_number).all()
+
+@app.post("/api/plan_board", response_model=schemas.MonthlyPlanBoard)
+def create_or_update_plan_board(data: schemas.MonthlyPlanBoardCreate, db: Session = Depends(get_db)):
+    existing = db.query(models.MonthlyPlanBoard).filter(
+        models.MonthlyPlanBoard.date == data.date,
+        models.MonthlyPlanBoard.shift_number == data.shift_number
+    ).first()
+    
+    if existing:
+        existing.shift_name = data.shift_name
+        existing.master_id = data.master_id
+        existing.plan_sheets = data.plan_sheets
+        existing.fact_sheets = data.fact_sheets
+        db.commit()
+        db.refresh(existing)
+        return existing
+    else:
+        new_plan = models.MonthlyPlanBoard(**data.model_dump())
+        db.add(new_plan)
+        db.commit()
+        db.refresh(new_plan)
+        return new_plan
+
+@app.post("/api/admin/import_plan_board")
+def import_plan_board(db: Session = Depends(get_db)):
+    file_path = "monthly_plan_board.xlsx"
+    if not os.path.exists(file_path):
+        raise HTTPException(404, "Файл monthly_plan_board.xlsx не найден в корне проекта")
+    
+    try:
+        wb = openpyxl.load_workbook(file_path, data_only=True)
+        ws = wb["Выработка"] if "Выработка" in wb.sheetnames else wb.active
+        
+        count_created = 0
+        count_updated = 0
+        
+        # Пропускаем заголовки (первые две строки, например)
+        # Ожидаемый формат: Дата (0), Месяц (1), Тип смены (2), Линия (3), Мастер (4), Смена (5), План (6), Факт (7)
+        for row in ws.iter_rows(min_row=3, values_only=True):
+            if not row[0]: continue # пустая дата
+            
+            date_val = row[0]
+            if isinstance(date_val, datetime):
+                date_val = date_val.date()
+            elif isinstance(date_val, str):
+                try:
+                    date_val = datetime.strptime(date_val, "%d.%m.%Y").date()
+                except ValueError:
+                    try:
+                        date_val = datetime.strptime(date_val, "%Y-%m-%d").date()
+                    except ValueError:
+                        continue
+                
+            shift_name = str(row[2]) if row[2] else "День"
+            
+            line_val = str(row[3]).strip() if row[3] else "ЛФМ-1"
+            if line_val == "Линия 1":
+                line_val = "ЛФМ-1"
+            elif line_val == "Линия 2":
+                line_val = "ЛФМ-2"
+                
+            master_name = str(row[4]).strip() if row[4] else ""
+            shift_number = int(row[5]) if row[5] else 1
+            plan_sheets = int(row[6]) if len(row) > 6 and row[6] else 0
+            fact_sheets = int(row[7]) if len(row) > 7 and row[7] else 0
+            
+            first_grade = 0
+            if len(row) > 8 and row[8] is not None:
+                try: first_grade = int(row[8])
+                except: pass
+                
+            defect = 0
+            if len(row) > 9 and row[9] is not None:
+                try: defect = int(row[9])
+                except: pass
+            
+            # Поиск мастера по имени
+            master = db.query(models.Master).filter(models.Master.name == master_name).first()
+            if not master:
+                # Если мастер не найден, создаем его? Или берем первого попавшегося?
+                # Лучше создать, чтобы не терять данные
+                master = models.Master(name=master_name, pin="0000", role="master")
+                db.add(master)
+                db.commit()
+                db.refresh(master)
+                
+            existing = db.query(models.MonthlyPlanBoard).filter(
+                models.MonthlyPlanBoard.date == date_val,
+                models.MonthlyPlanBoard.shift_number == shift_number,
+                models.MonthlyPlanBoard.line == line_val
+            ).first()
+            
+            if existing:
+                existing.shift_name = shift_name
+                existing.master_id = master.id
+                existing.plan_sheets = plan_sheets
+                existing.fact_sheets = fact_sheets
+                existing.first_grade = first_grade
+                existing.defect = defect
+                count_updated += 1
+            else:
+                new_plan = models.MonthlyPlanBoard(
+                    date=date_val,
+                    shift_name=shift_name,
+                    master_id=master.id,
+                    shift_number=shift_number,
+                    line=line_val,
+                    plan_sheets=plan_sheets,
+                    fact_sheets=fact_sheets,
+                    first_grade=first_grade,
+                    defect=defect
+                )
+                db.add(new_plan)
+                count_created += 1
+                
+        db.commit()
+        return {"status": "ok", "created": count_created, "updated": count_updated}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(500, f"Ошибка импорта: {str(e)}")

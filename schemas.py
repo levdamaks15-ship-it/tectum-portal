@@ -43,6 +43,9 @@ class LFMReportBase(BaseModel):
     product_name: str
     lfm_sheets: int = 0
     lfm_wind_resets: int = 0
+    formed_1st_grade: int = 0
+    formed_defect: int = 0
+    transferred_to_warehouse: int = 0
 
 class LFMReportCreate(LFMReportBase):
     pass
@@ -82,6 +85,9 @@ class ShiftBase(BaseModel):
     shift_name: str
     line: str
     
+    plan_sheets: Optional[int] = 0
+    plan_tons: Optional[float] = 0.0
+    
     receipt_chrysotile_4_20: float = 0.0
     receipt_chrysotile_5_65: float = 0.0
     receipt_chrysotile_6_40: Optional[float] = 0
@@ -90,6 +96,7 @@ class ShiftBase(BaseModel):
     receipt_crushed_slate: Optional[float] = 0
     receipt_asbozurit: Optional[float] = 0
     receipt_fiberglass: Optional[float] = 0
+    receipt_laprol: Optional[float] = 0
     
     zo_chrysotile_4_20: Optional[float] = 0
     zo_chrysotile_5_65: Optional[float] = 0
@@ -104,6 +111,8 @@ class ShiftBase(BaseModel):
     zo_asbozurit: Optional[float] = 0
     zo_fiberglass: Optional[float] = 0
     zo_laprol: Optional[float] = 0
+    zo_asb_drain: Optional[float] = 0
+    zo_cem_drain: Optional[float] = 0
     zo_batches: Optional[int] = 0
     
     zo_submitted: Optional[bool] = False
@@ -148,11 +157,19 @@ class ZOUpdate(BaseModel):
     asbozurit: float
     fiberglass: float
     laprol: float = 0
+    asb_drain: float = 0
+    cem_drain: float = 0
     batches: int = 0
     submitted: bool = False
 
+class MasterUpdate(BaseModel):
+    name: Optional[str] = None
+    role: Optional[str] = None
+    pin: Optional[str] = None
+
 class ProductNormBase(BaseModel):
     product_name: str
+    weight_kg: float = 0.0
     norm_chrysotile_4_20: float = 0.0
     norm_chrysotile_5_65: float = 0.0
     norm_chrysotile_6_40: float = 0.0
@@ -164,6 +181,18 @@ class ProductNormBase(BaseModel):
 
 class ProductNormCreate(ProductNormBase):
     pass
+
+class ProductNormUpdate(BaseModel):
+    product_name: Optional[str] = None
+    weight_kg: Optional[float] = None
+    norm_chrysotile_4_20: Optional[float] = None
+    norm_chrysotile_5_65: Optional[float] = None
+    norm_chrysotile_6_40: Optional[float] = None
+    norm_cement: Optional[float] = None
+    norm_cellulose: Optional[float] = None
+    norm_crushed_slate: Optional[float] = None
+    norm_asbozurit: Optional[float] = None
+    norm_fiberglass: Optional[float] = None
 
 class ProductNorm(ProductNormBase):
     id: int
@@ -181,3 +210,24 @@ class RawMaterialReport(BaseModel):
     shift_id: int
     total_deviation_kg: float
     details: List[MaterialDeviation]
+
+class MonthlyPlanBoardBase(BaseModel):
+    date: date
+    shift_name: str
+    shift_number: int
+    line: Optional[str] = "ЛФМ-1"
+    plan_sheets: int = 0
+    fact_sheets: int = 0
+    first_grade: int = 0
+    defect: int = 0
+
+class MonthlyPlanBoardCreate(MonthlyPlanBoardBase):
+    master_id: int
+
+class MonthlyPlanBoard(MonthlyPlanBoardBase):
+    id: int
+    master_id: int
+    master: Optional[Master] = None
+
+    class Config:
+        from_attributes = True

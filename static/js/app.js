@@ -7,8 +7,8 @@ let chartDefects = null;
 let chartMaterials = null;
 let chartDtCategory = null;
 let chartDtNodes = null;
-let chartDailyLfm1 = null;
-let chartDailyLfm2 = null;
+let chartDailySheets = null;
+let chartDailyTons = null;
 // Multipliers: stacks to sheets
 const PRODUCT_MULTIPLIERS = {
     "Шифер 7 волн": 100,
@@ -55,7 +55,7 @@ function toggleTheme() {
     const nextTheme = current === 'light' ? 'dark' : 'light';
     document.documentElement.setAttribute('data-theme', nextTheme);
     localStorage.setItem('theme', nextTheme);
-    if (currentUser && (currentUser.role === 'master' || currentUser.role === 'director')) {
+    if (currentUser && currentUser.role === 'director') {
         renderDashboard();
     }
 }
@@ -64,8 +64,58 @@ async function init() {
     initTheme();
     const res = await fetch('/api/masters/');
     const masters = await res.json();
-    const select = document.getElementById('user-select');
-    select.innerHTML = masters.map(m => `<option value="${m.name}">${m.name} (${m.role})</option>`).join('');
+    
+    const roleOrder = {
+        'director': 1,
+        'master': 2,
+        'zo': 3,
+        'lfm': 4,
+        'stacker': 5,
+        'destacker': 6,
+        'qcd': 7,
+        'mechanic': 8
+    };
+    
+    masters.sort((a, b) => {
+        const orderA = roleOrder[a.role] || 99;
+        const orderB = roleOrder[b.role] || 99;
+        if (orderA !== orderB) return orderA - orderB;
+        return a.name.localeCompare(b.name);
+    });
+    
+    const grid = document.getElementById('user-grid');
+    if (grid) {
+        grid.innerHTML = masters.map(m => {
+            let icon = '👤';
+            if (m.role === 'director') icon = '👔';
+            if (m.role === 'master') icon = '👷‍♂️';
+            if (m.role === 'mechanic') icon = '🔧';
+            if (m.role === 'qcd') icon = '🔍';
+            if (m.role === 'stacker' || m.role === 'destacker') icon = '🏗️';
+            if (m.role === 'zo') icon = '🧪';
+            if (m.role === 'lfm') icon = '⚙️';
+            
+            let roleName = m.role;
+            switch(m.role) {
+                case 'master': roleName = 'Мастер смены'; break;
+                case 'director': roleName = 'Руководство'; break;
+                case 'zo': roleName = 'Оператор ЗО'; break;
+                case 'lfm': roleName = 'Машинист ЛФМ'; break;
+                case 'stacker': roleName = 'Стакер'; break;
+                case 'destacker': roleName = 'Дестакер'; break;
+                case 'qcd': roleName = 'Инспектор СКК'; break;
+                case 'mechanic': roleName = 'Механик'; break;
+            }
+
+            return `
+            <div class="user-card" onclick="selectUser('${m.name}', '${roleName}')" style="background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); border-radius: 12px; padding: 1rem; text-align: center; cursor: pointer; transition: 0.2s;">
+                <div style="font-size: 2rem; margin-bottom: 0.5rem;">${icon}</div>
+                <div style="font-weight: 600; font-size: 0.9rem; color: var(--text-primary); margin-bottom: 0.2rem;">${m.name}</div>
+                <div style="font-size: 0.75rem; color: var(--text-secondary);">${roleName}</div>
+            </div>
+            `;
+        }).join('');
+    }
     
     flatpickr('.time-picker', {
         enableTime: true,
@@ -76,8 +126,26 @@ async function init() {
     });
 }
 
+function selectUser(name, roleName) {
+    document.getElementById('selected-user-name').value = name;
+    document.getElementById('user-selection-section').style.display = 'none';
+    const pinSection = document.getElementById('pin-section');
+    pinSection.style.display = 'block';
+    document.getElementById('selected-user-display').innerText = `${name} (${roleName})`;
+    document.getElementById('pin-input').focus();
+    document.getElementById('login-error').style.display = 'none';
+}
+
+function resetLoginSelection() {
+    document.getElementById('selected-user-name').value = '';
+    document.getElementById('user-selection-section').style.display = 'block';
+    document.getElementById('pin-section').style.display = 'none';
+    document.getElementById('pin-input').value = '';
+    document.getElementById('login-error').style.display = 'none';
+}
+
 async function login() {
-    const name = document.getElementById('user-select').value;
+    const name = document.getElementById('selected-user-name').value;
     const pin = document.getElementById('pin-input').value;
     const errorEl = document.getElementById('login-error');
     
@@ -125,11 +193,17 @@ function applyRoleVisibility() {
     const btnDash = document.getElementById('tab-btn-dashboard');
     const btnMats = document.getElementById('tab-btn-materials');
     const btnArch = document.getElementById('tab-btn-archive');
+    const btnDaily = document.getElementById('tab-btn-daily-report');
+    const btnWeekly = document.getElementById('tab-btn-weekly-report');
+    const btnPlanBoard = document.getElementById('tab-btn-plan-board');
     if(btnProd) btnProd.style.display = 'none';
     if(btnDown) btnDown.style.display = 'none';
     if(btnDash) btnDash.style.display = 'none';
     if(btnMats) btnMats.style.display = 'none';
     if(btnArch) btnArch.style.display = 'none';
+    if(btnDaily) btnDaily.style.display = 'none';
+    if(btnWeekly) btnWeekly.style.display = 'none';
+    if(btnPlanBoard) btnPlanBoard.style.display = 'none';
     
     if (role === 'master' || role === 'director' || role === 'mechanic') {
         if(tabsMenu) tabsMenu.style.display = 'flex';
@@ -137,15 +211,19 @@ function applyRoleVisibility() {
         if (role === 'master') {
             if(btnProd) btnProd.style.display = 'inline-block';
             if(btnDown) btnDown.style.display = 'inline-block';
-            if(btnDash) btnDash.style.display = 'inline-block';
             if(btnMats) btnMats.style.display = 'inline-block';
             if(btnArch) btnArch.style.display = 'inline-block';
+            if(btnDaily) btnDaily.style.display = 'inline-block';
+            if(btnWeekly) btnWeekly.style.display = 'inline-block';
             switchTab('production');
         } else if (role === 'director') {
             if(btnDown) btnDown.style.display = 'inline-block';
             if(btnDash) btnDash.style.display = 'inline-block';
             if(btnMats) btnMats.style.display = 'inline-block';
             if(btnArch) btnArch.style.display = 'inline-block';
+            if(btnDaily) btnDaily.style.display = 'inline-block';
+            if(btnWeekly) btnWeekly.style.display = 'inline-block';
+            if(btnPlanBoard) btnPlanBoard.style.display = 'inline-block';
             switchTab('dashboard');
         } else if (role === 'mechanic') {
             if(btnDown) btnDown.style.display = 'inline-block';
@@ -184,6 +262,8 @@ function switchTab(tabId) {
     const mats = document.getElementById('materials-tab');
     const arch = document.getElementById('archive-tab');
     const daily = document.getElementById('daily-report-tab');
+    const weekly = document.getElementById('weekly-report-tab');
+    const planBoard = document.getElementById('plan-board-tab');
     
     if(prod) prod.style.display = 'none';
     if(down) down.style.display = 'none';
@@ -191,6 +271,8 @@ function switchTab(tabId) {
     if(mats) mats.style.display = 'none';
     if(arch) arch.style.display = 'none';
     if(daily) daily.style.display = 'none';
+    if(weekly) weekly.style.display = 'none';
+    if(planBoard) planBoard.style.display = 'none';
     
     const target = document.getElementById(`${tabId}-tab`);
     if(target) {
@@ -202,13 +284,18 @@ function switchTab(tabId) {
         loadArchive();
     } else if (tabId === 'materials') {
         loadMaterialsReport();
+    } else if (tabId === 'plan-board') {
+        loadDirectorPlanBoard();
     } else if (tabId === 'daily-report') {
-        const dMonth = document.getElementById('daily-report-month');
-        if (!dMonth.value) {
+        const dDate = document.getElementById('daily-report-start-date');
+        if (!dDate.value) {
             const d = new Date();
-            dMonth.value = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+            d.setDate(d.getDate() - 6);
+            dDate.value = d.toISOString().split('T')[0];
         }
         loadDailyReport();
+    } else if (tabId === 'weekly-report') {
+        loadWeeklyReport();
     }
 }
 
@@ -226,7 +313,7 @@ async function loadData() {
         const lfmList = document.getElementById('lfm-reports-list');
         if(lfmList) {
             lfmList.innerHTML = shift.lfm_reports.map(r => 
-                `<div>- ${r.product_name}: ${r.lfm_sheets} шт, Сброс: ${r.lfm_wind_resets} шт</div>`
+                `<div>- ${r.product_name}: ${r.lfm_sheets} шт, Сброс: ${r.lfm_wind_resets} шт, 1 сорт: ${r.formed_1st_grade || 0}, Брак: ${r.formed_defect || 0}, На склад: ${r.transferred_to_warehouse || 0}</div>`
             ).join('');
         }
         
@@ -253,6 +340,8 @@ async function loadData() {
             document.getElementById('zo-asb').value = shift.zo_asbozurit || '';
             document.getElementById('zo-fib').value = shift.zo_fiberglass || '';
             document.getElementById('zo-laprol').value = shift.zo_laprol || '';
+            document.getElementById('zo-asb-drain').value = shift.zo_asb_drain || '';
+            document.getElementById('zo-cem-drain').value = shift.zo_cem_drain || '';
             document.getElementById('zo-batches').value = shift.zo_batches || '';
         }
         
@@ -265,7 +354,7 @@ async function loadData() {
         document.getElementById('readonly-badge').style.display = 'none';
     }
     
-    if (currentUser.role === 'master' || currentUser.role === 'director') {
+    if (currentUser.role === 'director') {
         renderDashboard();
     }
     
@@ -328,15 +417,18 @@ async function viewShift(shiftId) {
     const lfmList = document.getElementById('lfm-reports-list');
     if(lfmList) {
         lfmList.innerHTML = (shift.lfm_reports || []).map(r => 
-            `<div>- ${r.product_name}: ${r.lfm_sheets} шт, Сброс: ${r.lfm_wind_resets} шт</div>`
+            `<div>- ${r.product_name}: ${r.lfm_sheets} шт, Сброс: ${r.lfm_wind_resets} шт, 1 сорт: ${r.formed_1st_grade || 0}, Брак: ${r.formed_defect || 0}, На склад: ${r.transferred_to_warehouse || 0}</div>`
         ).join('');
     }
     
     renderDowntimesTable(shift);
     
-    if (currentUser.role === 'master' || currentUser.role === 'director') {
+    if (currentUser.role === 'master') {
         renderSummaryTable(shift);
         renderMasterDashboard(shift);
+        fetchMaterialsSummary(shift.id);
+    } else if (currentUser.role === 'director') {
+        renderSummaryTable(shift);
         fetchMaterialsSummary(shift.id);
         renderDashboard(shift); // Need to pass shift instead of fetching active
     }
@@ -440,7 +532,8 @@ async function updateReceipt() {
         cellulose: getNum('rec-cel'),
         crushed_slate: getNum('rec-slate'),
         asbozurit: getNum('rec-asb'),
-        fiberglass: getNum('rec-fib')
+        fiberglass: getNum('rec-fib'),
+        laprol: getNum('rec-laprol')
     };
     await fetch(`/api/shifts/${activeShiftId}/receipt`, {
         method: 'POST',
@@ -466,6 +559,8 @@ async function updateZO() {
         asbozurit: getNum('zo-asb'),
         fiberglass: getNum('zo-fib'),
         laprol: getNum('zo-laprol'),
+        asb_drain: getNum('zo-asb-drain'),
+        cem_drain: getNum('zo-cem-drain'),
         batches: getNum('zo-batches'),
         submitted: true
     };
@@ -483,15 +578,21 @@ async function addLFMReport() {
     const product_name = document.getElementById('lfm-product').value;
     const lfm_sheets = getNum('lfm-sheets');
     const lfm_wind_resets = getNum('lfm-resets');
+    const formed_1st_grade = getNum('lfm-1st');
+    const formed_defect = getNum('lfm-defect');
+    const transferred_to_warehouse = getNum('lfm-warehouse');
     
     await fetch(`/api/shifts/${activeShiftId}/lfm`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ product_name, lfm_sheets, lfm_wind_resets })
+        body: JSON.stringify({ product_name, lfm_sheets, lfm_wind_resets, formed_1st_grade, formed_defect, transferred_to_warehouse })
     });
     alert("Отчет добавлен");
     document.getElementById('lfm-sheets').value = '';
     document.getElementById('lfm-resets').value = '';
+    document.getElementById('lfm-1st').value = '';
+    document.getElementById('lfm-defect').value = '';
+    document.getElementById('lfm-warehouse').value = '';
     loadData();
 }
 
@@ -1156,37 +1257,28 @@ async function loadMaterialsReport() {
 }
 
 async function loadDailyReport() {
-    const month = document.getElementById('daily-report-month').value;
-    const unit = document.getElementById('daily-report-unit').value; // 'sheets' or 'tons'
-    const line = document.getElementById('daily-report-line').value; // 'all', 'lfm1', 'lfm2'
-    if (!month) return;
+    const startDate = document.getElementById('daily-report-start-date').value;
+    const line = document.getElementById('daily-report-line').value; // 'lfm1', 'lfm2'
+    if (!startDate) return;
     
     try {
-        const res = await fetch(`/api/dashboard/daily_report?month=${month}`);
+        const res = await fetch(`/api/dashboard/daily_report?start_date=${startDate}`);
         if (!res.ok) throw new Error("Ошибка загрузки");
         const report = await res.json();
         
-        const container1 = document.getElementById('chart-daily-lfm1').parentElement.parentElement;
-        const container2 = document.getElementById('chart-daily-lfm2').parentElement.parentElement;
+        const lineData = line === 'lfm1' ? report.data.line_1 : report.data.line_2;
         
-        container1.style.display = (line === 'all' || line === 'lfm1') ? 'block' : 'none';
-        container2.style.display = (line === 'all' || line === 'lfm2') ? 'block' : 'none';
-
-        if (line === 'all' || line === 'lfm1') {
-            renderDailyChart('lfm1', 'chart-daily-lfm1', report.data.line_1, report.days, unit);
-        }
-        if (line === 'all' || line === 'lfm2') {
-            renderDailyChart('lfm2', 'chart-daily-lfm2', report.data.line_2, report.days, unit);
-        }
+        renderDailyChart('sheets', 'chart-daily-sheets', lineData, report.days, 'sheets', report.start_date);
+        renderDailyChart('tons', 'chart-daily-tons', lineData, report.days, 'tons', report.start_date);
     } catch (e) {
         console.error(e);
     }
 }
 
-function renderDailyChart(lineId, canvasId, lineData, daysCount, unit) {
+function renderDailyChart(chartInstanceKey, canvasId, lineData, daysCount, unit, startDateStr) {
     const ctx = document.getElementById(canvasId).getContext('2d');
-    if (lineId === 'lfm1' && chartDailyLfm1) chartDailyLfm1.destroy();
-    if (lineId === 'lfm2' && chartDailyLfm2) chartDailyLfm2.destroy();
+    if (chartInstanceKey === 'sheets' && chartDailySheets) chartDailySheets.destroy();
+    if (chartInstanceKey === 'tons' && chartDailyTons) chartDailyTons.destroy();
     
     const isLight = document.documentElement.getAttribute('data-theme') === 'light';
     const textCol = isLight ? '#1e293b' : '#e0e0e0';
@@ -1196,10 +1288,17 @@ function renderDailyChart(lineId, canvasId, lineData, daysCount, unit) {
     const nightData = [];
     const bgColorsDay = [];
     const bgColorsNight = [];
+    const dayPlanData = [];
+    const nightPlanData = [];
     
-    for(let d=1; d<=daysCount; d++) {
-        labels.push(d.toString());
-        const dStr = d.toString();
+    for(let d=0; d<daysCount; d++) {
+        const dObj = new Date(startDateStr);
+        dObj.setDate(dObj.getDate() + d);
+        const dStr = dObj.toISOString().split('T')[0];
+        const displayLabel = dObj.toLocaleDateString('ru-RU', {day: 'numeric', month: 'short'});
+        
+        labels.push(displayLabel);
+        
         const dVal = lineData[dStr] ? lineData[dStr]["День"][unit] : 0;
         const nVal = lineData[dStr] ? lineData[dStr]["Ночь"][unit] : 0;
         
@@ -1209,9 +1308,13 @@ function renderDailyChart(lineId, canvasId, lineData, daysCount, unit) {
         
         dayData.push(dVal);
         nightData.push(nVal);
+        dayPlanData.push(dPlan);
+        nightPlanData.push(nPlan);
         
-        bgColorsDay.push(dVal >= dPlan ? 'rgba(40, 167, 69, 0.8)' : 'rgba(220, 53, 69, 0.8)');
-        bgColorsNight.push(nVal >= nPlan ? 'rgba(40, 167, 69, 0.8)' : 'rgba(220, 53, 69, 0.8)');
+        // Day: Light Green (Met Plan) / Light Red (Failed Plan)
+        bgColorsDay.push(dVal >= dPlan ? '#4ade80' : '#f87171');
+        // Night: Dark Green (Met Plan) / Dark Red (Failed Plan)
+        bgColorsNight.push(nVal >= nPlan ? '#166534' : '#991b1b');
     }
     
     const chart = new Chart(ctx, {
@@ -1219,6 +1322,26 @@ function renderDailyChart(lineId, canvasId, lineData, daysCount, unit) {
         data: {
             labels: labels,
             datasets: [
+                {
+                    label: 'План (День)',
+                    type: 'line',
+                    data: dayPlanData,
+                    borderColor: '#eab308', // Yellow
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    fill: false,
+                    pointRadius: 0
+                },
+                {
+                    label: 'План (Ночь)',
+                    type: 'line',
+                    data: nightPlanData,
+                    borderColor: '#3b82f6', // Blue
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    fill: false,
+                    pointRadius: 0
+                },
                 {
                     label: 'День',
                     data: dayData,
@@ -1239,13 +1362,16 @@ function renderDailyChart(lineId, canvasId, lineData, daysCount, unit) {
                 tooltip: {
                     callbacks: {
                         afterLabel: function(context) {
-                            const d = context.dataIndex + 1;
-                            const dStr = d.toString();
-                            const isDay = context.datasetIndex === 0;
-                            const sName = isDay ? "День" : "Ночь";
+                            const dIndex = context.dataIndex;
+                            const dObj = new Date(startDateStr);
+                            dObj.setDate(dObj.getDate() + dIndex);
+                            const dStr = dObj.toISOString().split('T')[0];
+                            const sName = context.datasetIndex === 2 ? "День" : "Ночь";
                             const planKey = unit === 'sheets' ? 'plan_sheets' : 'plan_tons';
                             const planVal = lineData[dStr] ? lineData[dStr][sName][planKey] : 0;
-                            return `План: ${planVal.toFixed(1)}`;
+                            const firstVal = lineData[dStr] ? lineData[dStr][sName]["first_grade"] : 0;
+                            const defVal = lineData[dStr] ? lineData[dStr][sName]["defect"] : 0;
+                            return `План: ${planVal.toFixed(1)}\n1 сорт: ${firstVal} шт\nБрак: ${defVal} шт`;
                         }
                     }
                 }
@@ -1256,16 +1382,342 @@ function renderDailyChart(lineId, canvasId, lineData, daysCount, unit) {
             }
         }
     });
-    
-    if (lineId === 'lfm1') chartDailyLfm1 = chart;
-    else chartDailyLfm2 = chart;
+    if (chartInstanceKey === 'sheets') chartDailySheets = chart;
+    else chartDailyTons = chart;
 }
 
-function exportDailyReport() {
-    const month = document.getElementById('daily-report-month').value;
+async function exportDailyReportPDF() {
+    const startDate = document.getElementById('daily-report-start-date').value;
     const line = document.getElementById('daily-report-line').value;
-    if (!month) return;
-    window.open(`/api/dashboard/export_daily_report?month=${month}&line=${line}`, '_blank');
+    if (!startDate) return;
+    
+    try {
+        const res = await fetch(`/api/dashboard/daily_report?start_date=${startDate}`);
+        if (!res.ok) throw new Error("Ошибка загрузки данных с сервера");
+        const report = await res.json();
+        
+        let totalSheets = 0, totalTons = 0, planSheets = 0, planTons = 0;
+        let totalFirst = 0, totalDefect = 0;
+        
+        const processLineData = (lineData) => {
+            for (const date in lineData) {
+                for (const shiftType in lineData[date]) {
+                    const s = lineData[date][shiftType];
+                    totalSheets += s.sheets || 0;
+                    totalTons += s.tons || 0;
+                    planSheets += s.plan_sheets || 0;
+                    planTons += s.plan_tons || 0;
+                    totalFirst += s.first_grade || 0;
+                    totalDefect += s.defect || 0;
+                }
+            }
+        };
+
+        const lineData = line === 'lfm1' ? report.data.line_1 : report.data.line_2;
+        processLineData(lineData);
+
+        const lineName = line === 'lfm1' ? 'ЛФМ-1' : 'ЛФМ-2';
+        const pct = planSheets > 0 ? ((totalSheets / planSheets) * 100).toFixed(1) : '0';
+
+        // Функция: снять скриншот графика Chart.js с БЕЛЫМ фоном
+        const captureChartWhiteBg = (chartInstance) => {
+            const src = chartInstance.canvas;
+            const tmp = document.createElement('canvas');
+            tmp.width = src.width;
+            tmp.height = src.height;
+            const ctx2 = tmp.getContext('2d');
+            ctx2.fillStyle = 'white';
+            ctx2.fillRect(0, 0, tmp.width, tmp.height);
+            ctx2.drawImage(src, 0, 0);
+            return tmp.toDataURL('image/jpeg', 0.95);
+        };
+
+        const chartImages = [];
+        if (typeof chartDailySheets !== 'undefined' && chartDailySheets !== null) {
+            chartImages.push({ label: 'В листах', img: captureChartWhiteBg(chartDailySheets) });
+        }
+        if (typeof chartDailyTons !== 'undefined' && chartDailyTons !== null) {
+            chartImages.push({ label: 'В тоннах', img: captureChartWhiteBg(chartDailyTons) });
+        }
+
+        // Вычисляем конечную дату (startDate + 6 дней = 7 дней всего)
+        const startDt = new Date(startDate);
+        const endDt = new Date(startDt);
+        endDt.setDate(endDt.getDate() + 6);
+        const fmtDate = (d) => d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        const periodStr = `${fmtDate(startDt)} — ${fmtDate(endDt)}`;
+
+        // Рисуем шапку документа на Canvas (так кириллица отображается корректно)
+        const CW = 1800; // ширина холста в пикселях
+        const HEADER_H = 160; // более компактная шапка
+        const hCanvas = document.createElement('canvas');
+        hCanvas.width = CW;
+        hCanvas.height = HEADER_H;
+        const hCtx = hCanvas.getContext('2d');
+
+        hCtx.fillStyle = '#ffffff';
+        hCtx.fillRect(0, 0, CW, HEADER_H);
+
+        // Заголовок
+        hCtx.fillStyle = '#1a1a2e';
+        hCtx.font = 'bold 48px Arial';
+        hCtx.textAlign = 'center';
+        hCtx.fillText('Ежедневная сводка мастера', CW / 2, 48);
+
+        // Подзаголовок: период ОТ и ДО + линия
+        hCtx.fillStyle = '#444';
+        hCtx.font = '30px Arial';
+        hCtx.fillText(`Период: ${periodStr}  |  Линия: ${lineName}`, CW / 2, 85);
+
+        // Линия-разделитель
+        hCtx.strokeStyle = '#ccc';
+        hCtx.lineWidth = 1.5;
+        hCtx.beginPath();
+        hCtx.moveTo(60, 100);
+        hCtx.lineTo(CW - 60, 100);
+        hCtx.stroke();
+
+        // Блок статистики — компактный, в одну строку
+        const statsY = 135;
+        const cols = [CW * 0.18, CW * 0.5, CW * 0.82];
+        const labels = ['План', 'Факт', 'Выполнение'];
+        const vals = [
+            `${planSheets.toLocaleString('ru-RU')} л  /  ${planTons.toFixed(1)} т`,
+            `${totalSheets.toLocaleString('ru-RU')} л  /  ${totalTons.toFixed(1)} т`,
+            `${pct}%`
+        ];
+
+        labels.forEach((lbl, i) => {
+            hCtx.textAlign = 'center';
+            hCtx.fillStyle = '#888';
+            hCtx.font = '24px Arial';
+            hCtx.fillText(lbl, cols[i], statsY - 25);
+            hCtx.fillStyle = '#111';
+            hCtx.font = 'bold 28px Arial';
+            hCtx.fillText(vals[i], cols[i], statsY);
+            
+            // Add quality text under Fact
+            if (i === 1) {
+                hCtx.fillStyle = '#555';
+                hCtx.font = '20px Arial';
+                hCtx.fillText(`1 сорт: ${totalFirst} шт  |  Брак: ${totalDefect} шт`, cols[i], statsY + 25);
+            }
+        });
+
+        const headerImg = hCanvas.toDataURL('image/jpeg', 0.95);
+
+        // Собираем PDF через jsPDF
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+        const pageW = 297;
+        const pageH = 210;
+        const margin = 10;
+        const contentW = pageW - margin * 2;
+
+        // Вставляем шапку (компактная: 160px / 1800px * contentW ≈ ~24мм)
+        const headerMmH = (HEADER_H / CW) * contentW;
+        doc.addImage(headerImg, 'JPEG', margin, margin, contentW, headerMmH);
+
+        // Вставляем графики
+        let y = margin + headerMmH + 5;
+
+        for (let i = 0; i < chartImages.length; i++) {
+            if (i > 0) {
+                doc.addPage();
+                y = margin;
+            }
+            if (chartImages.length > 1) {
+                // Подпись линии как картинка-canvas
+                const lblCanvas = document.createElement('canvas');
+                lblCanvas.width = CW;
+                lblCanvas.height = 60;
+                const lCtx = lblCanvas.getContext('2d');
+                lCtx.fillStyle = '#ffffff';
+                lCtx.fillRect(0, 0, CW, 60);
+                lCtx.fillStyle = '#333';
+                lCtx.font = 'bold 36px Arial';
+                lCtx.textAlign = 'left';
+                lCtx.fillText(chartImages[i].label, 0, 45);
+                const lblH = (60 / CW) * contentW;
+                doc.addImage(lblCanvas.toDataURL('image/jpeg', 0.9), 'JPEG', margin, y, contentW, lblH);
+                y += lblH + 2;
+            }
+
+            // Добавляем график, вписывая его в оставшееся место страницы
+            const availH = pageH - y - margin;
+            const chartAspect = chartImages[i].img ? 2.5 : 2; // chart.js charts are wide
+            const chartH = Math.min(availH, contentW / chartAspect);
+            doc.addImage(chartImages[i].img, 'JPEG', margin, y, contentW, chartH);
+            y += chartH;
+        }
+
+        doc.save(`report_${startDate}_${line}.pdf`);
+
+    } catch (e) {
+        alert("Ошибка при выгрузке PDF: " + e.message);
+        console.error(e);
+    }
+}
+
+async function loadWeeklyReport() {
+    const startDate = document.getElementById('weekly-report-start-date').value;
+    if (!startDate) {
+        const d = new Date();
+        const day = d.getDay() || 7; // Get current day number, convert Sun(0) to 7
+        if (day !== 1) d.setHours(-24 * (day - 1)); // Set to Monday
+        document.getElementById('weekly-report-start-date').value = d.toISOString().split('T')[0];
+        return loadWeeklyReport();
+    }
+    
+    try {
+        const res = await fetch(`/api/dashboard/weekly?start_date=${startDate}`);
+        if (!res.ok) throw new Error("Ошибка загрузки");
+        const report = await res.json();
+        
+        const tbody = document.getElementById('weekly-report-body');
+        if (!report.data || report.data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;">Нет данных за выбранную неделю</td></tr>';
+            return;
+        }
+        
+        tbody.innerHTML = report.data.map(d => {
+            const pct = d.plan_sheets > 0 ? ((d.fact_sheets / d.plan_sheets) * 100).toFixed(1) : 0;
+            const pctColor = pct < 100 ? 'var(--danger-color)' : 'var(--success-color)';
+            
+            // Format 1st grade & defect as "N шт (X%)"
+            const dsTotal = d.ds_first_grade + d.ds_defect;
+            const ds1stPct = dsTotal > 0 ? ((d.ds_first_grade / dsTotal) * 100).toFixed(1) : 0;
+            const dsDefPct = dsTotal > 0 ? ((d.ds_defect / dsTotal) * 100).toFixed(1) : 0;
+            
+            return `
+                <tr>
+                    <td>${d.date}</td>
+                    <td>${d.shift_name} (${d.line})</td>
+                    <td>${d.master}</td>
+                    <td>${d.plan_sheets} / ${d.plan_tons}</td>
+                    <td>${d.fact_sheets} / ${d.fact_tons}</td>
+                    <td style="color: ${pctColor}; font-weight: bold;">${pct}%</td>
+                    <td>${d.ds_first_grade} (${ds1stPct}%)</td>
+                    <td>${d.ds_defect} (${dsDefPct}%)</td>
+                    <td style="color: var(--accent-color);">${d.note || ''}</td>
+                </tr>
+            `;
+        }).join('');
+        
+    } catch (e) {
+        console.error(e);
+        document.getElementById('weekly-report-body').innerHTML = '<tr><td colspan="9" style="text-align:center; color: var(--danger-color);">Ошибка загрузки</td></tr>';
+    }
+}
+
+async function exportWeeklyReportPDF() {
+    const startDate = document.getElementById('weekly-report-start-date').value;
+    if (!startDate) return;
+    
+    try {
+        const res = await fetch(`/api/dashboard/weekly?start_date=${startDate}`);
+        if (!res.ok) throw new Error("Ошибка загрузки");
+        const report = await res.json();
+        
+        if (!report.data || report.data.length === 0) {
+            return alert("Нет данных для выгрузки");
+        }
+        
+        // Use hidden canvas to render the table
+        const CW = 2000;
+        const HEADER_H = 150;
+        const ROW_H = 60;
+        const hCanvas = document.createElement('canvas');
+        hCanvas.width = CW;
+        hCanvas.height = HEADER_H + ROW_H * (report.data.length + 1) + 20;
+        const ctx = hCanvas.getContext('2d');
+        
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, hCanvas.width, hCanvas.height);
+        
+        // Header
+        ctx.fillStyle = '#111';
+        ctx.font = 'bold 48px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('Еженедельный отчет', CW / 2, 60);
+        
+        ctx.fillStyle = '#444';
+        ctx.font = '30px Arial';
+        ctx.fillText(`Период: ${report.start_date} — ${report.end_date}`, CW / 2, 110);
+        
+        ctx.strokeStyle = '#ccc';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(50, 130);
+        ctx.lineTo(CW - 50, 130);
+        ctx.stroke();
+        
+        // Table Headers
+        let y = HEADER_H + 40;
+        const cols = [50, 200, 450, 750, 1050, 1300, 1450, 1650, 1850];
+        const headers = ['Дата', 'Смена (Линия)', 'Мастер', 'План (л/т)', 'Факт (л/т)', 'Вып. %', '1-й сорт', 'Брак', 'Прим.'];
+        
+        ctx.font = 'bold 24px Arial';
+        ctx.textAlign = 'left';
+        ctx.fillStyle = '#333';
+        headers.forEach((h, i) => {
+            ctx.fillText(h, cols[i], y);
+        });
+        
+        y += 20;
+        ctx.beginPath();
+        ctx.moveTo(50, y);
+        ctx.lineTo(CW - 50, y);
+        ctx.stroke();
+        
+        // Table Rows
+        ctx.font = '24px Arial';
+        report.data.forEach(d => {
+            y += ROW_H;
+            
+            const pct = d.plan_sheets > 0 ? ((d.fact_sheets / d.plan_sheets) * 100).toFixed(1) : 0;
+            const dsTotal = d.ds_first_grade + d.ds_defect;
+            const ds1stPct = dsTotal > 0 ? ((d.ds_first_grade / dsTotal) * 100).toFixed(1) : 0;
+            const dsDefPct = dsTotal > 0 ? ((d.ds_defect / dsTotal) * 100).toFixed(1) : 0;
+            
+            ctx.fillStyle = '#000';
+            ctx.fillText(d.date, cols[0], y);
+            ctx.fillText(`${d.shift_name} (${d.line})`, cols[1], y);
+            ctx.fillText(d.master, cols[2], y);
+            ctx.fillText(`${d.plan_sheets} / ${d.plan_tons}`, cols[3], y);
+            ctx.fillText(`${d.fact_sheets} / ${d.fact_tons}`, cols[4], y);
+            
+            ctx.fillStyle = pct < 100 ? '#dc3545' : '#28a745';
+            ctx.fillText(`${pct}%`, cols[5], y);
+            
+            ctx.fillStyle = '#000';
+            ctx.fillText(`${d.ds_first_grade} (${ds1stPct}%)`, cols[6], y);
+            ctx.fillText(`${d.ds_defect} (${dsDefPct}%)`, cols[7], y);
+            
+            ctx.fillStyle = '#ffc107';
+            ctx.fillText(d.note || '', cols[8], y);
+            
+            ctx.strokeStyle = '#eee';
+            ctx.beginPath();
+            ctx.moveTo(50, y + 20);
+            ctx.lineTo(CW - 50, y + 20);
+            ctx.stroke();
+        });
+        
+        const imgData = hCanvas.toDataURL('image/jpeg', 0.95);
+        
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+        const contentW = 297 - 20;
+        const hMm = (hCanvas.height / CW) * contentW;
+        doc.addImage(imgData, 'JPEG', 10, 10, contentW, hMm);
+        
+        doc.save(`weekly_report_${startDate}.pdf`);
+        
+    } catch (e) {
+        alert("Ошибка при выгрузке PDF: " + e.message);
+        console.error(e);
+    }
 }
 
 async function loadArchive() {
@@ -1396,14 +1848,124 @@ function renderShiftBoard(boardData) {
     container.innerHTML = html;
 }
 
-function exportWeek() {
+async function exportWeek() {
     const start = document.getElementById('archive-week-start').value;
-    if (!start) return alert("Выберите дату начала недели");
-    window.open(`/api/dashboard/export_week?start_date=${start}`, '_blank');
+    if (!start) return alert("Выберите начало недели");
+    
+    try {
+        const response = await fetch(`/api/dashboard/export_week?start_date=${start}`);
+        if (!response.ok) throw new Error("Download failed");
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `week_${start}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) {
+        alert("Ошибка при выгрузке: " + e.message);
+    }
 }
 
-function exportShift(shiftId) {
-    window.open(`/api/dashboard/export_shift?shift_id=${shiftId}`, '_blank');
+async function exportShift(shiftId) {
+    try {
+        const response = await fetch(`/api/dashboard/export_shift?shift_id=${shiftId}`);
+        if (!response.ok) throw new Error("Download failed");
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `shift_${shiftId}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) {
+        alert("Ошибка при выгрузке: " + e.message);
+    }
+}
+
+// --- PLAN BOARD (DIRECTOR) ---
+async function loadDirectorPlanBoard() {
+    try {
+        // Загрузим мастеров для селекта
+        const mastersRes = await fetch('/api/masters/');
+        const masters = await mastersRes.json();
+        const select = document.getElementById('pb-master');
+        if (select) {
+            select.innerHTML = masters.filter(m => m.role === 'master').map(m => `<option value="${m.id}">${m.name}</option>`).join('');
+        }
+        
+        // Сегодняшняя дата по умолчанию
+        const pbDate = document.getElementById('pb-date');
+        if (pbDate && !pbDate.value) {
+            pbDate.value = new Date().toISOString().split('T')[0];
+        }
+
+        const res = await fetch('/api/plan_board');
+        const data = await res.json();
+        const tbody = document.getElementById('director-plan-board-body');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+        if (data.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;">Нет данных</td></tr>`;
+            return;
+        }
+        data.forEach(p => {
+            const masterName = p.master ? p.master.name : 'Н/Д';
+            tbody.innerHTML += `
+                <tr>
+                    <td>${p.date}</td>
+                    <td>${p.shift_name}</td>
+                    <td>${p.shift_number}</td>
+                    <td>${masterName}</td>
+                    <td>${p.plan_sheets}</td>
+                    <td>${p.fact_sheets}</td>
+                </tr>
+            `;
+        });
+    } catch (e) {
+        console.error(e);
+        const tbody = document.getElementById('director-plan-board-body');
+        if (tbody) tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:red;">Ошибка загрузки данных</td></tr>`;
+    }
+}
+
+async function saveDirectorPlanBoard() {
+    const data = {
+        date: document.getElementById('pb-date').value,
+        shift_name: document.getElementById('pb-shift-name').value,
+        shift_number: parseInt(document.getElementById('pb-shift-num').value) || 1,
+        master_id: parseInt(document.getElementById('pb-master').value),
+        plan_sheets: parseInt(document.getElementById('pb-plan').value) || 0,
+        fact_sheets: parseInt(document.getElementById('pb-fact').value) || 0
+    };
+    
+    if (!data.date || isNaN(data.master_id)) {
+        alert("Заполните дату и выберите мастера");
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/plan_board', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        
+        if (res.ok) {
+            alert("Данные успешно сохранены/обновлены");
+            loadDirectorPlanBoard();
+        } else {
+            const err = await res.json();
+            alert("Ошибка сохранения: " + (err.detail || "Неизвестная ошибка"));
+        }
+    } catch (e) {
+        console.error(e);
+        alert("Сетевая ошибка при сохранении");
+    }
 }
 
 window.onload = init;

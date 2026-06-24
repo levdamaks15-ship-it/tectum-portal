@@ -1,0 +1,257 @@
+Max cols: 50, Max rows: 1259
+
+Row 1 length 50:
+  Col 1: дата
+  Col 2: № партии
+  Col 3: линия
+  Col 4: смена
+  Col 5: мастер
+  Col 6: продукт
+  Col 7: замес
+  Col 8: Формовка, лист
+  Col 9: Формовка, тонна
+  Col 10: На склад
+  Col 11: 1-сорт
+  Col 12: брак
+  Col 13: количество сбросов наката
+  Col 14: асбест
+  Col 15: Цемент
+  Col 16: None
+  Col 17: None
+  Col 18: None
+  Col 19: цемент
+  Col 20: асб-слив
+  Col 21: цем-слив
+  Col 22: Лапрорл
+  Col 23: None
+  Col 24: Целлюлоза
+  Col 25: None
+  Col 26: Стекловолокно
+  Col 27: None
+  Col 28: Д/ШИФЕР
+  Col 29: None
+  Col 30: асбозурит
+  Col 31: норма А
+  Col 32: факт А
+  Col 33: откл
+  Col 34: норма Ц
+  Col 35: факт Ц
+  Col 36: откл
+  Col 37: норма ЦЛ
+  Col 38: факт ЦЛ
+  Col 39: откл
+  Col 40: норма СВ
+  Col 41: факт СВ
+  Col 42: откл
+  Col 43: норма ФБ
+  Col 44: факт ФБ
+  Col 45: откл
+  Col 46: норма АСБ
+  Col 47: факт АСБ
+  Col 48: откл
+  Col 49: None
+  Col 50: масса, тн
+Row 2 length 50:
+  Col 1: None
+  Col 2: None
+  Col 3: None
+  Col 4: None
+  Col 5: None
+  Col 6: None
+  Col 7: None
+  Col 8: None
+  Col 9: None
+  Col 10: None
+  Col 11: None
+  Col 12: None
+  Col 13: None
+  Col 14: None
+  Col 15: 1 силос
+  Col 16: 2 силос
+  Col 17: 3 силос
+  Col 18: 4 силос
+  Col 19: None
+  Col 20: None
+  Col 21: None
+  Col 22: Приход
+  Col 23: Расход
+  Col 24: Приход
+  Col 25: Расход
+  Col 26: Приход
+  Col 27: Расход
+  Col 28: Приход
+  Col 29: Расход
+  Col 30: None
+  Col 31: None
+  Col 32: None
+  Col 33: None
+  Col 34: None
+  Col 35: None
+  Col 36: None
+  Col 37: None
+  Col 38: None
+  Col 39: None
+  Col 40: None
+  Col 41: None
+  Col 42: None
+  Col 43: None
+  Col 44: None
+  Col 45: None
+  Col 46: None
+  Col 47: None
+  Col 48: None
+  Col 49: None
+  Col 50: None
+Row 3 length 50:
+  Col 1: 2026-02-16 00:00:00
+  Col 2: 0001
+  Col 3: хоргос
+  Col 4: день
+  Col 5: Монаев
+  Col 6: РП
+  Col 7: 9
+  Col 8: 268
+  Col 9: 4.67124
+  Col 10: None
+  Col 11: None
+  Col 12: None
+  Col 13: None
+  Col 14: 908
+  Col 15: 5400
+  Col 16: 0
+  Col 17: 0
+  Col 18: 0
+  Col 19: 5400
+  Col 20: 0
+  Col 21: 0
+  Col 22: None
+  Col 23: None
+  Col 24: None
+  Col 25: 90
+  Col 26: None
+  Col 27: 0
+  Col 28: None
+  Col 29: 90
+  Col 30: 0
+  Col 31: 2.06
+  Col 32: 3.388059701492537
+  Col 33: 1.328059701492537
+  Col 34: 13.28
+  Col 35: 20.149253731343283
+  Col 36: 6.869253731343283
+  Col 37: 0.205
+  Col 38: 0.3358208955223881
+  Col 39: 0.1308208955223881
+  Col 40: 0.041
+  Col 41: 0
+  Col 42: -0.041
+  Col 43: 0
+  Col 44: 0.3358208955223881
+  Col 45: 0.3358208955223881
+  Col 46: 0.103
+  Col 47: 0
+  Col 48: -0.103
+  Col 49: None
+  Col 50: 4671.24
+Row 4 length 50:
+  Col 1: 2026-02-16 00:00:00
+  Col 2: 0002
+  Col 3: хоргос
+  Col 4: ночь
+  Col 5: Дауылбай
+  Col 6: РП коричневый
+  Col 7: 27
+  Col 8: 1265
+  Col 9: 22.04895
+  Col 10: None
+  Col 11: 13
+  Col 12: 47
+  Col 13: None
+  Col 14: 2706
+  Col 15: 16186
+  Col 16: None
+  Col 17: None
+  Col 18: None
+  Col 19: 16186
+  Col 20: None
+  Col 21: None
+  Col 22: None
+  Col 23: None
+  Col 24: None
+  Col 25: 270
+  Col 26: None
+  Col 27: None
+  Col 28: None
+  Col 29: 270
+  Col 30: None
+  Col 31: 2.06
+  Col 32: 2.139130434782609
+  Col 33: 0.07913043478260873
+  Col 34: 13.28
+  Col 35: 12.795256916996047
+  Col 36: -0.4847430830039521
+  Col 37: 0.205
+  Col 38: 0.2134387351778656
+  Col 39: 0.008438735177865614
+  Col 40: 0.041
+  Col 41: 0
+  Col 42: -0.041
+  Col 43: 0
+  Col 44: 0.2134387351778656
+  Col 45: 0.2134387351778656
+  Col 46: 0.103
+  Col 47: 0
+  Col 48: -0.103
+  Col 49: None
+  Col 50: 22048.95
+Row 5 length 50:
+  Col 1: 2026-02-17 00:00:00
+  Col 2: 0003
+  Col 3: хоргос
+  Col 4: день
+  Col 5: Султанулы
+  Col 6: РП коричневый
+  Col 7: 20
+  Col 8: 996
+  Col 9: 17.36028
+  Col 10: None
+  Col 11: 12
+  Col 12: None
+  Col 13: None
+  Col 14: 2003
+  Col 15: 12092
+  Col 16: None
+  Col 17: None
+  Col 18: None
+  Col 19: 12092
+  Col 20: None
+  Col 21: None
+  Col 22: None
+  Col 23: None
+  Col 24: None
+  Col 25: 200
+  Col 26: None
+  Col 27: None
+  Col 28: None
+  Col 29: 190
+  Col 30: None
+  Col 31: 2.06
+  Col 32: 2.0110441767068274
+  Col 33: -0.04895582329317261
+  Col 34: 13.28
+  Col 35: 12.140562248995984
+  Col 36: -1.1394377510040155
+  Col 37: 0.205
+  Col 38: 0.20080321285140562
+  Col 39: -0.004196787148594366
+  Col 40: 0.041
+  Col 41: 0
+  Col 42: -0.041
+  Col 43: 0
+  Col 44: 0.19076305220883535
+  Col 45: 0.19076305220883535
+  Col 46: 0.103
+  Col 47: 0
+  Col 48: -0.103
+  Col 49: None
+  Col 50: 17360.28

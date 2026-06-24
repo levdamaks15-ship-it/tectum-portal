@@ -8,7 +8,7 @@ def seed_board():
     db = SessionLocal()
     
     # Сначала добавим мастеров, если их нет
-    masters = ["Бекбосынов Р.", "Монаев С.", "Султанұлы С.", "Дауылбай М."]
+    masters = ["Бекбосынов Р.", "Монаев С.", "Султанулы Сакен", "Дауылбай М."]
     for m in masters:
         user = db.query(Master).filter(Master.name == m).first()
         if not user:
@@ -43,7 +43,7 @@ def seed_board():
             ]
         },
         {
-            "master": "Султанұлы С.",
+            "master": "Султанулы Сакен",
             "shifts": [
                 ("2026-06-02", "Ночь", 990),
                 ("2026-06-05", "День", 2488),
