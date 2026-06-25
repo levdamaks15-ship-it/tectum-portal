@@ -80,7 +80,7 @@
                 <button class="tab-btn active" id="tab-btn-production" onclick="switchTab('production')">📦 Производство</button>
                 <button class="tab-btn" id="tab-btn-downtimes" onclick="switchTab('downtimes')">⏱ Журнал Простоев</button>
                 <button class="tab-btn" id="tab-btn-dashboard" onclick="switchTab('dashboard')">📊 Дашборд</button>
-                <button class="tab-btn" id="tab-btn-daily-report" onclick="switchTab('daily-report')">📈 Ежедневная сводка</button>
+                <button class="tab-btn" id="tab-btn-daily-report" onclick="switchTab('daily-report')">📈 Месячная сводка</button>
                 <button class="tab-btn" id="tab-btn-weekly-report" onclick="switchTab('weekly-report')">📅 Еженедельный отчет</button>
                 <button class="tab-btn" id="tab-btn-materials" onclick="switchTab('materials')">🧪 Сводка по сырью</button>
                 <button class="tab-btn" id="tab-btn-archive" onclick="switchTab('archive')">📁 Архив смен</button>
@@ -508,14 +508,33 @@
 
                 <div id="daily-report-tab" class="glass-panel card" style="display: none;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
-                        <h3 style="margin: 0;">Ежедневная сводка мастера</h3>
+                        <h3 style="margin: 0;" id="daily-report-title">Месячная сводка выработки</h3>
                         <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
-                            <label style="font-size: 0.9rem; color: var(--text-secondary);">Начало 7-дневки:</label>
-                            <input type="date" id="daily-report-start-date" onchange="loadDailyReport()" style="padding: 0.5rem; border-radius: 8px; background: rgba(0,0,0,0.2); color: white; border: 1px solid rgba(255,255,255,0.2);" title="Начало периода (7 дней)">
+                            <label style="font-size: 0.9rem; color: var(--text-secondary);">Линия:</label>
                             <select id="daily-report-line" onchange="loadDailyReport()" style="padding: 0.5rem; border-radius: 8px;">
                                 <option value="lfm1">Линия 1 (ЛФМ-1)</option>
                                 <option value="lfm2">Линия 2 (ЛФМ-2)</option>
                             </select>
+                            
+                            <label style="font-size: 0.9rem; color: var(--text-secondary);">Интервал:</label>
+                            <select id="daily-report-range-type" onchange="toggleRangeControls(); loadDailyReport();" style="padding: 0.5rem; border-radius: 8px;">
+                                <option value="month" selected>Весь месяц</option>
+                                <option value="week">Конкретная неделя</option>
+                                <option value="day">Конкретный день</option>
+                            </select>
+
+                            <input type="month" id="daily-report-month" onchange="loadDailyReport()" style="padding: 0.5rem; border-radius: 8px; background: rgba(0,0,0,0.2); color: white; border: 1px solid rgba(255,255,255,0.2);">
+                            
+                            <select id="daily-report-week-select" onchange="loadDailyReport()" style="padding: 0.5rem; border-radius: 8px; display: none;">
+                                <option value="1" selected>Неделя 1 (1-7)</option>
+                                <option value="2">Неделя 2 (8-14)</option>
+                                <option value="3">Неделя 3 (15-21)</option>
+                                <option value="4">Неделя 4 (22-28)</option>
+                                <option value="5">Неделя 5 (29+)</option>
+                            </select>
+
+                            <input type="date" id="daily-report-day-picker" onchange="loadDailyReport()" style="padding: 0.5rem; border-radius: 8px; background: rgba(0,0,0,0.2); color: white; border: 1px solid rgba(255,255,255,0.2); display: none;">
+                            
                             <button onclick="exportDailyReportPDF()" style="background: #217346; width: auto; padding: 0.5rem 1.5rem;">Выгрузить в PDF</button>
                         </div>
                     </div>
@@ -728,6 +747,6 @@
     </div>
     
 
-    <script src="/static/js/app.js?v=20260625"></script>
+    <script src="/static/js/app.js?v=20260625_v2"></script>
 </body>
 </html>

@@ -287,12 +287,16 @@ function switchTab(tabId) {
     } else if (tabId === 'plan-board') {
         loadDirectorPlanBoard();
     } else if (tabId === 'daily-report') {
-        const dDate = document.getElementById('daily-report-start-date');
-        if (!dDate.value) {
-            const d = new Date();
-            d.setDate(d.getDate() - 6);
-            dDate.value = d.toISOString().split('T')[0];
+        const dMonth = document.getElementById('daily-report-month');
+        if (dMonth && !dMonth.value) {
+            const now = new Date();
+            dMonth.value = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
         }
+        const dDay = document.getElementById('daily-report-day-picker');
+        if (dDay && !dDay.value) {
+            dDay.value = new Date().toISOString().split('T')[0];
+        }
+        toggleRangeControls();
         loadDailyReport();
     } else if (tabId === 'weekly-report') {
         loadWeeklyReport();
@@ -1256,13 +1260,68 @@ async function loadMaterialsReport() {
     }
 }
 
+function toggleRangeControls() {
+    const rangeType = document.getElementById('daily-report-range-type').value;
+    const monthPicker = document.getElementById('daily-report-month');
+    const weekSelect = document.getElementById('daily-report-week-select');
+    const dayPicker = document.getElementById('daily-report-day-picker');
+    
+    if (rangeType === 'month') {
+        monthPicker.style.display = 'inline-block';
+        weekSelect.style.display = 'none';
+        dayPicker.style.display = 'none';
+    } else if (rangeType === 'week') {
+        monthPicker.style.display = 'inline-block';
+        weekSelect.style.display = 'inline-block';
+        dayPicker.style.display = 'none';
+    } else if (rangeType === 'day') {
+        monthPicker.style.display = 'none';
+        weekSelect.style.display = 'none';
+        dayPicker.style.display = 'inline-block';
+    }
+}
+
+function getDailyReportDates() {
+    const rangeType = document.getElementById('daily-report-range-type').value;
+    let startDate = '', endDate = '';
+    
+    if (rangeType === 'month') {
+        const monthVal = document.getElementById('daily-report-month').value;
+        if (!monthVal) return null;
+        const [y, m] = monthVal.split('-');
+        const lastDay = new Date(y, m, 0).getDate();
+        startDate = `${monthVal}-01`;
+        endDate = `${monthVal}-${String(lastDay).padStart(2, '0')}`;
+    } else if (rangeType === 'week') {
+        const monthVal = document.getElementById('daily-report-month').value;
+        if (!monthVal) return null;
+        const [y, m] = monthVal.split('-');
+        const weekVal = parseInt(document.getElementById('daily-report-week-select').value) || 1;
+        let startDay = 1, endDay = 7;
+        if (weekVal === 2) { startDay = 8; endDay = 14; }
+        else if (weekVal === 3) { startDay = 15; endDay = 21; }
+        else if (weekVal === 4) { startDay = 22; endDay = 28; }
+        else if (weekVal === 5) { startDay = 29; endDay = new Date(y, m, 0).getDate(); }
+        startDate = `${monthVal}-${String(startDay).padStart(2, '0')}`;
+        endDate = `${monthVal}-${String(endDay).padStart(2, '0')}`;
+    } else if (rangeType === 'day') {
+        const dayVal = document.getElementById('daily-report-day-picker').value;
+        if (!dayVal) return null;
+        startDate = dayVal;
+        endDate = dayVal;
+    }
+    
+    return { startDate, endDate };
+}
+
 async function loadDailyReport() {
-    const startDate = document.getElementById('daily-report-start-date').value;
+    const dates = getDailyReportDates();
+    if (!dates) return;
+    const { startDate, endDate } = dates;
     const line = document.getElementById('daily-report-line').value; // 'lfm1', 'lfm2'
-    if (!startDate) return;
     
     try {
-        const res = await fetch(`/api/dashboard/daily_report?start_date=${startDate}`);
+        const res = await fetch(`/api/dashboard/daily_report?start_date=${startDate}&end_date=${endDate}`);
         if (!res.ok) throw new Error("Ошибка загрузки");
         const report = await res.json();
         
@@ -1387,12 +1446,13 @@ function renderDailyChart(chartInstanceKey, canvasId, lineData, daysCount, unit,
 }
 
 async function exportDailyReportPDF() {
-    const startDate = document.getElementById('daily-report-start-date').value;
+    const dates = getDailyReportDates();
+    if (!dates) return;
+    const { startDate, endDate } = dates;
     const line = document.getElementById('daily-report-line').value;
-    if (!startDate) return;
     
     try {
-        const res = await fetch(`/api/dashboard/daily_report?start_date=${startDate}`);
+        const res = await fetch(`/api/dashboard/daily_report?start_date=${startDate}&end_date=${endDate}`);
         if (!res.ok) throw new Error("Ошибка загрузки данных с сервера");
         const report = await res.json();
         
@@ -1440,12 +1500,10 @@ async function exportDailyReportPDF() {
             chartImages.push({ label: 'В тоннах', img: captureChartWhiteBg(chartDailyTons) });
         }
 
-        // Вычисляем конечную дату (startDate + 6 дней = 7 дней всего)
         const startDt = new Date(startDate);
-        const endDt = new Date(startDt);
-        endDt.setDate(endDt.getDate() + 6);
+        const endDt = new Date(endDate);
         const fmtDate = (d) => d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
-        const periodStr = `${fmtDate(startDt)} — ${fmtDate(endDt)}`;
+        const periodStr = startDate === endDate ? fmtDate(startDt) : `${fmtDate(startDt)} — ${fmtDate(endDt)}`;
 
         // Рисуем шапку документа на Canvas (так кириллица отображается корректно)
         const CW = 1800; // ширина холста в пикселях

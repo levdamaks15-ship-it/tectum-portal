@@ -531,14 +531,22 @@ def get_shift_plan(db: Session, shift: models.Shift) -> int:
     return 2700 if shift.shift_name == "День" else 3300
 
 @app.get("/api/dashboard/daily_report")
-def get_daily_report(start_date: str, line: str = None, db: Session = Depends(get_db)):
+def get_daily_report(start_date: str, end_date: str = None, line: str = None, db: Session = Depends(get_db)):
     try:
         sd = datetime.strptime(start_date, "%Y-%m-%d").date()
     except:
-        raise HTTPException(400, "Invalid date format")
+        raise HTTPException(400, "Invalid start_date format")
         
-    num_days = 7
-    ed = sd + timedelta(days=num_days - 1)
+    if end_date:
+        try:
+            ed = datetime.strptime(end_date, "%Y-%m-%d").date()
+        except:
+            raise HTTPException(400, "Invalid end_date format")
+    else:
+        ed = sd + timedelta(days=6)
+        
+    num_days = (ed - sd).days + 1
+
     
     shifts = db.query(models.Shift).filter(
         models.Shift.date >= sd,
