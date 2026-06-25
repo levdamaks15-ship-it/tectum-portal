@@ -1918,6 +1918,7 @@ async function loadDirectorPlanBoard() {
             tbody.innerHTML += `
                 <tr>
                     <td>${p.date}</td>
+                    <td>${p.line || 'Н/Д'}</td>
                     <td>${p.shift_name}</td>
                     <td>${p.shift_number}</td>
                     <td>${masterName}</td>
@@ -1936,6 +1937,7 @@ async function loadDirectorPlanBoard() {
 async function saveDirectorPlanBoard() {
     const data = {
         date: document.getElementById('pb-date').value,
+        line: document.getElementById('pb-line').value,
         shift_name: document.getElementById('pb-shift-name').value,
         shift_number: parseInt(document.getElementById('pb-shift-num').value) || 1,
         master_id: parseInt(document.getElementById('pb-master').value),

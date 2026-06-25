@@ -1143,15 +1143,16 @@ def get_plan_board(db: Session = Depends(get_db)):
 def create_or_update_plan_board(data: schemas.MonthlyPlanBoardCreate, db: Session = Depends(get_db)):
     existing = db.query(models.MonthlyPlanBoard).filter(
         models.MonthlyPlanBoard.date == data.date,
-        models.MonthlyPlanBoard.shift_number == data.shift_number
+        models.MonthlyPlanBoard.shift_name == data.shift_name,
+        models.MonthlyPlanBoard.line == data.line
     ).first()
     
     if data.date.weekday() == 0 and data.shift_name == "День":
         data.plan_sheets = 0
         
     if existing:
-        existing.shift_name = data.shift_name
         existing.master_id = data.master_id
+        existing.shift_number = data.shift_number
         existing.plan_sheets = data.plan_sheets
         existing.fact_sheets = data.fact_sheets
         db.commit()

@@ -591,6 +591,13 @@
                                 <select id="pb-master"></select>
                             </div>
                             <div>
+                                <label style="font-size: 0.8rem; color: var(--text-secondary);">Линия</label>
+                                <select id="pb-line">
+                                    <option value="ЛФМ-1">ЛФМ-1</option>
+                                    <option value="ЛФМ-2" selected>ЛФМ-2</option>
+                                </select>
+                            </div>
+                            <div>
                                 <label style="font-size: 0.8rem; color: var(--text-secondary);">Тип смены</label>
                                 <select id="pb-shift-name">
                                     <option value="День">День</option>
@@ -618,6 +625,7 @@
                             <thead>
                                 <tr>
                                     <th>Дата</th>
+                                    <th>Линия</th>
                                     <th>Смена</th>
                                     <th>Смена (номер)</th>
                                     <th>Мастер</th>
