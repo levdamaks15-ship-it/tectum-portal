@@ -17,3 +17,10 @@ When making changes to the monthly production plan logic or generating plans (e.
 ## Language Rules
 ALWAYS write and update planning artifacts, such as `implementation_plan.md` and `walkthrough.md`, in Russian.
 
+## Portal Data Architecture and Edit Rules
+При работе с сущностями портала Tectum строго придерживайтесь следующих правил редактирования и аудита:
+- **Разрешено редактирование (CRUD)** для сущностей: Пользователи/Мастера (`models.Master`), Нормативы расхода (`models.ProductNorm`), Простои (`models.Downtime`). Все изменения должны проходить через соответствующие `PUT` методы.
+- **План-факт доска (MonthlyPlanBoard)** обновляется через механизм Upsert (метод `POST /api/plan_board`). Все изменения (CREATE, UPDATE, DELETE) в ней должны обязательно логироваться в таблицу `AuditLog` с подробным описанием старых и новых значений.
+- **Ограничения редактирования**: Исторические данные закрытых смен (`status = 'closed'`), отдельные отчеты ЛФМ, а также проверенные СКК партии (`status = 'qcd_checked'`) в текущей версии архитектуры защищены от изменений и не имеют UI для редактирования. Не меняйте это поведение без явного запроса пользователя.
+
+
