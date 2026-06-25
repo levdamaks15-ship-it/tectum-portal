@@ -1,8 +1,9 @@
+import os
 import openpyxl
 from datetime import datetime
 
 def generate_plan():
-    file_path = "monthly_plan_board.xlsx"
+    file_path = os.path.join("docs", "excel", "monthly_plan_board.xlsx")
     wb = openpyxl.load_workbook(file_path)
     ws = wb.active
     

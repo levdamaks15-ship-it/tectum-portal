@@ -292,7 +292,7 @@ async function loadPlanBoard() {
         if (!tbody) return;
         tbody.innerHTML = '';
         if (data.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;">Нет данных</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;">Нет данных</td></tr>`;
             return;
         }
         data.forEach(p => {
@@ -300,6 +300,7 @@ async function loadPlanBoard() {
             tbody.innerHTML += `
                 <tr>
                     <td>${p.date}</td>
+                    <td>${p.line || 'Н/Д'}</td>
                     <td>${p.shift_name}</td>
                     <td>${p.shift_number}</td>
                     <td>${masterName}</td>
@@ -307,13 +308,35 @@ async function loadPlanBoard() {
                     <td>${p.fact_sheets}</td>
                     <td>${p.first_grade || 0}</td>
                     <td>${p.defect || 0}</td>
+                    <td>
+                        <button class="btn-danger" style="padding: 0.25rem 0.5rem; width: auto; font-size: 0.8rem;" onclick="deletePlanBoardRow(${p.id})">
+                            <i class="fa-solid fa-trash"></i> Удалить
+                        </button>
+                    </td>
                 </tr>
             `;
         });
     } catch (e) {
         console.error(e);
         const tbody = document.getElementById('plan-board-table-body');
-        if (tbody) tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:red;">Ошибка загрузки данных</td></tr>`;
+        if (tbody) tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:red;">Ошибка загрузки данных</td></tr>`;
+    }
+}
+
+async function deletePlanBoardRow(id) {
+    if (!confirm("Вы уверены, что хотите удалить эту строку из выработки?")) return;
+    try {
+        const res = await fetch(`/api/plan_board/${id}`, { method: 'DELETE' });
+        if (res.ok) {
+            alert("Строка успешно удалена.");
+            loadPlanBoard();
+        } else {
+            const err = await res.json();
+            alert("Ошибка удаления: " + (err.detail || "Неизвестная ошибка"));
+        }
+    } catch (e) {
+        console.error(e);
+        alert("Сетевая ошибка при удалении.");
     }
 }
 

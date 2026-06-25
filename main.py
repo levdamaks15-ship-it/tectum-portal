@@ -1171,11 +1171,20 @@ def create_or_update_plan_board(data: schemas.MonthlyPlanBoardCreate, db: Sessio
         db.refresh(new_plan)
         return new_plan
 
+@app.delete("/api/plan_board/{id}")
+def delete_plan_board_row(id: int, db: Session = Depends(get_db)):
+    row = db.query(models.MonthlyPlanBoard).filter(models.MonthlyPlanBoard.id == id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Запись не найдена")
+    db.delete(row)
+    db.commit()
+    return {"status": "ok"}
+
 @app.post("/api/admin/import_plan_board")
 def import_plan_board(db: Session = Depends(get_db)):
-    file_path = "monthly_plan_board.xlsx"
+    file_path = os.path.join("docs", "excel", "monthly_plan_board.xlsx")
     if not os.path.exists(file_path):
-        raise HTTPException(404, "Файл monthly_plan_board.xlsx не найден в корне проекта")
+        raise HTTPException(404, f"Файл {file_path} не найден в проекте")
     
     try:
         wb = openpyxl.load_workbook(file_path, data_only=True)
