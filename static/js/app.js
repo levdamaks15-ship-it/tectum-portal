@@ -87,6 +87,7 @@ async function init() {
     if (grid) {
         grid.innerHTML = masters.map(m => {
             let icon = '👤';
+            if (m.role === 'admin') icon = '🛡️';
             if (m.role === 'director') icon = '👔';
             if (m.role === 'master') icon = '👷‍♂️';
             if (m.role === 'mechanic') icon = '🔧';
@@ -97,6 +98,7 @@ async function init() {
             
             let roleName = m.role;
             switch(m.role) {
+                case 'admin': roleName = 'Администратор'; break;
                 case 'master': roleName = 'Мастер смены'; break;
                 case 'director': roleName = 'Руководство'; break;
                 case 'zo': roleName = 'Оператор ЗО'; break;
@@ -205,10 +207,20 @@ function applyRoleVisibility() {
     if(btnWeekly) btnWeekly.style.display = 'none';
     if(btnPlanBoard) btnPlanBoard.style.display = 'none';
     
-    if (role === 'master' || role === 'director' || role === 'mechanic') {
+    if (role === 'master' || role === 'director' || role === 'mechanic' || role === 'admin') {
         if(tabsMenu) tabsMenu.style.display = 'flex';
         
-        if (role === 'master') {
+        if (role === 'admin') {
+            if(btnProd) btnProd.style.display = 'inline-block';
+            if(btnDown) btnDown.style.display = 'inline-block';
+            if(btnDash) btnDash.style.display = 'inline-block';
+            if(btnMats) btnMats.style.display = 'inline-block';
+            if(btnArch) btnArch.style.display = 'inline-block';
+            if(btnDaily) btnDaily.style.display = 'inline-block';
+            if(btnWeekly) btnWeekly.style.display = 'inline-block';
+            if(btnPlanBoard) btnPlanBoard.style.display = 'inline-block';
+            switchTab('dashboard');
+        } else if (role === 'master') {
             if(btnProd) btnProd.style.display = 'inline-block';
             if(btnDown) btnDown.style.display = 'inline-block';
             if(btnMats) btnMats.style.display = 'inline-block';
@@ -236,19 +248,19 @@ function applyRoleVisibility() {
         switchTab('production');
     }
     
-    const isMechanicOrMaster = (role === 'master' || role === 'mechanic');
+    const isMechanicOrMaster = (role === 'master' || role === 'mechanic' || role === 'admin');
     const wrapEnd = document.getElementById('wrapper-dt-end');
     const wrapCat = document.getElementById('wrapper-dt-cat');
     if (wrapEnd) wrapEnd.style.display = isMechanicOrMaster ? 'block' : 'none';
     if (wrapCat) wrapCat.style.display = isMechanicOrMaster ? 'block' : 'none';
 
-    document.getElementById('master-view').style.display = role === 'master' ? 'block' : 'none';
-    document.getElementById('zo-view').style.display = role === 'zo' ? 'block' : 'none';
-    document.getElementById('lfm-view').style.display = role === 'lfm' ? 'block' : 'none';
-    document.getElementById('stacker-view').style.display = role === 'stacker' ? 'block' : 'none';
-    document.getElementById('destacker-view').style.display = role === 'destacker' ? 'block' : 'none';
-    document.getElementById('qcd-view').style.display = role === 'qcd' ? 'block' : 'none';
-    document.getElementById('report-view').style.display = role === 'master' ? 'block' : 'none';
+    document.getElementById('master-view').style.display = (role === 'master' || role === 'admin') ? 'block' : 'none';
+    document.getElementById('zo-view').style.display = (role === 'zo' || role === 'admin') ? 'block' : 'none';
+    document.getElementById('lfm-view').style.display = (role === 'lfm' || role === 'admin') ? 'block' : 'none';
+    document.getElementById('stacker-view').style.display = (role === 'stacker' || role === 'admin') ? 'block' : 'none';
+    document.getElementById('destacker-view').style.display = (role === 'destacker' || role === 'admin') ? 'block' : 'none';
+    document.getElementById('qcd-view').style.display = (role === 'qcd' || role === 'admin') ? 'block' : 'none';
+    document.getElementById('report-view').style.display = (role === 'master' || role === 'admin') ? 'block' : 'none';
 }
 
 function switchTab(tabId) {
