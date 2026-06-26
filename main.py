@@ -1,6 +1,6 @@
-from fastapi import FastAPI, Depends, HTTPException, UploadFile, File
+from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy.orm import Session
 from database import SessionLocal, engine, Base
 import models, schemas
@@ -18,6 +18,9 @@ from openpyxl.chart import BarChart, Reference
 import io
 from fastapi import Response
 from urllib.parse import quote
+import msal
+import requests
+from starlette.middleware.sessions import SessionMiddleware
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -35,6 +38,13 @@ async def lifespan(app: FastAPI):
     try:
         conn = sqlite3.connect("tectum.db")
         conn.execute("ALTER TABLE monthly_plan_board ADD COLUMN defect INTEGER DEFAULT 0")
+        conn.commit()
+        conn.close()
+    except: pass
+    
+    try:
+        conn = sqlite3.connect("tectum.db")
+        conn.execute("ALTER TABLE masters ADD COLUMN email VARCHAR(255)")
         conn.commit()
         conn.close()
     except: pass
@@ -66,6 +76,11 @@ async def lifespan(app: FastAPI):
     yield
 
 app = FastAPI(title="Tectum Enterprise Portal", lifespan=lifespan)
+app.add_middleware(
+    SessionMiddleware, 
+    secret_key=os.getenv("SESSION_SECRET_KEY", "super-secret-key-for-tectum-portal"),
+    max_age=86400 * 30  # 30 days
+)
 
 TONS_PER_HOUR = 5.0
 PRICE_PER_TON = 100000.0
@@ -111,11 +126,139 @@ class LoginRequest(BaseModel):
     pin: str
 
 @app.post("/api/login/")
-def login(data: LoginRequest, db: Session = Depends(get_db)):
+def login(data: LoginRequest, request: Request, db: Session = Depends(get_db)):
     master = db.query(models.Master).filter(models.Master.name == data.name, models.Master.pin == data.pin).first()
     if not master:
         raise HTTPException(status_code=400, detail="Неверное имя или ПИН-код")
+    request.session["user_id"] = master.id
+    request.session["user_name"] = master.name
+    request.session["user_role"] = master.role
     return {"id": master.id, "name": master.name, "role": master.role}
+
+@app.get("/api/me/")
+def get_current_user(request: Request, db: Session = Depends(get_db)):
+    sso_enabled = bool(os.getenv("M365_CLIENT_ID") and os.getenv("M365_TENANT_ID") and os.getenv("M365_CLIENT_SECRET"))
+    user_id = request.session.get("user_id")
+    if not user_id:
+        return {"authenticated": False, "sso_enabled": sso_enabled}
+    master = db.query(models.Master).get(user_id)
+    if not master:
+        request.session.clear()
+        return {"authenticated": False, "sso_enabled": sso_enabled}
+    return {
+        "authenticated": True,
+        "sso_enabled": sso_enabled,
+        "user": {"id": master.id, "name": master.name, "role": master.role, "email": master.email}
+    }
+
+# --- MICROSOFT ENTRA ID (SSO) AUTHENTICATION ---
+TENANT_ID = os.getenv("M365_TENANT_ID")
+CLIENT_ID = os.getenv("M365_CLIENT_ID")
+CLIENT_SECRET = os.getenv("M365_CLIENT_SECRET")
+
+AUTHORITY = f"https://login.microsoftonline.com/{TENANT_ID}" if TENANT_ID else ""
+SCOPES = ["User.Read"]
+
+def get_msal_app():
+    return msal.ConfidentialClientApplication(
+        CLIENT_ID,
+        authority=AUTHORITY,
+        client_credential=CLIENT_SECRET
+    )
+
+@app.get("/api/auth/login")
+def auth_login(request: Request):
+    if not CLIENT_ID or not TENANT_ID or not CLIENT_SECRET:
+        raise HTTPException(status_code=400, detail="Microsoft SSO is not configured on the server")
+        
+    scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
+    host = request.headers.get("x-forwarded-host", request.url.netloc)
+    redirect_uri = f"{scheme}://{host}/api/auth/callback"
+    request.session["redirect_uri"] = redirect_uri
+    
+    msal_app = get_msal_app()
+    auth_url = msal_app.get_authorization_request_url(
+        scopes=SCOPES,
+        redirect_uri=redirect_uri
+    )
+    return RedirectResponse(auth_url)
+
+@app.get("/api/auth/callback")
+def auth_callback(request: Request, code: str = None, error: str = None, error_description: str = None, db: Session = Depends(get_db)):
+    if not CLIENT_ID or not TENANT_ID or not CLIENT_SECRET:
+        raise HTTPException(status_code=400, detail="Microsoft SSO is not configured on the server")
+        
+    if error:
+        raise HTTPException(status_code=400, detail=f"Microsoft Auth Error: {error_description or error}")
+    if not code:
+        raise HTTPException(status_code=400, detail="Missing authorization code")
+        
+    redirect_uri = request.session.get("redirect_uri")
+    if not redirect_uri:
+        scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
+        host = request.headers.get("x-forwarded-host", request.url.netloc)
+        redirect_uri = f"{scheme}://{host}/api/auth/callback"
+        
+    msal_app = get_msal_app()
+    result = msal_app.acquire_token_by_authorization_code(
+        code,
+        scopes=SCOPES,
+        redirect_uri=redirect_uri
+    )
+    
+    if "error" in result:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Token acquisition failed: {result.get('error_description') or result.get('error')}"
+        )
+        
+    access_token = result.get("access_token")
+    if not access_token:
+        raise HTTPException(status_code=400, detail="No access token in response")
+        
+    # Call Graph /me to get user details
+    headers = {"Authorization": f"Bearer {access_token}"}
+    me_resp = requests.get("https://graph.microsoft.com/v1.0/me", headers=headers)
+    if not me_resp.ok:
+        raise HTTPException(status_code=400, detail="Failed to retrieve user profile from Microsoft Graph")
+        
+    me_data = me_resp.json()
+    email = me_data.get("mail") or me_data.get("userPrincipalName")
+    name = me_data.get("displayName")
+    
+    if not email:
+        raise HTTPException(status_code=400, detail="Microsoft account email not found")
+        
+    master = db.query(models.Master).filter(models.Master.email == email).first()
+    
+    if not master:
+        # Fallback search by displayName in masters list with no email associated yet
+        master = db.query(models.Master).filter(
+            func.lower(models.Master.name) == name.lower(),
+            models.Master.email == None
+        ).first()
+        if master:
+            master.email = email
+            db.commit()
+            db.refresh(master)
+            
+    if not master:
+        # Automatically create master
+        master = models.Master(name=name, email=email, pin="0000", role="master")
+        db.add(master)
+        db.commit()
+        db.refresh(master)
+        
+    request.session["user_id"] = master.id
+    request.session["user_name"] = master.name
+    request.session["user_role"] = master.role
+    
+    return RedirectResponse(url="/")
+
+@app.get("/api/auth/logout")
+def auth_logout(request: Request):
+    request.session.clear()
+    return RedirectResponse(url="/")
 
 @app.get("/api/masters/")
 def get_masters(db: Session = Depends(get_db)):
@@ -531,7 +674,7 @@ def get_shift_plan(db: Session, shift: models.Shift) -> int:
     return 2700 if shift.shift_name == "День" else 3300
 
 @app.get("/api/dashboard/daily_report")
-def get_daily_report(start_date: str, end_date: str = None, line: str = None, db: Session = Depends(get_db)):
+def get_daily_report(start_date: str, end_date: str = None, line: str = None, shift_number: int = None, db: Session = Depends(get_db)):
     try:
         sd = datetime.strptime(start_date, "%Y-%m-%d").date()
     except:
@@ -547,7 +690,6 @@ def get_daily_report(start_date: str, end_date: str = None, line: str = None, db
         
     num_days = (ed - sd).days + 1
 
-    
     shifts = db.query(models.Shift).filter(
         models.Shift.date >= sd,
         models.Shift.date <= ed
@@ -558,16 +700,29 @@ def get_daily_report(start_date: str, end_date: str = None, line: str = None, db
         models.MonthlyPlanBoard.date <= ed
     ).all()
     
-    data = {
-        "line_1": {str(sd + timedelta(days=i)): {"День": {"sheets": 0, "tons": 0.0, "plan_sheets": (0 if (sd + timedelta(days=i)).weekday() == 0 else 2700), "plan_tons": (0 if (sd + timedelta(days=i)).weekday() == 0 else 2700) * 19.6 / 1000.0, "first_grade": 0, "defect": 0}, "Ночь": {"sheets": 0, "tons": 0.0, "plan_sheets": 3300, "plan_tons": 3300 * 19.6 / 1000.0, "first_grade": 0, "defect": 0}} for i in range(num_days)},
-        "line_2": {str(sd + timedelta(days=i)): {"День": {"sheets": 0, "tons": 0.0, "plan_sheets": (0 if (sd + timedelta(days=i)).weekday() == 0 else 2700), "plan_tons": (0 if (sd + timedelta(days=i)).weekday() == 0 else 2700) * 19.6 / 1000.0, "first_grade": 0, "defect": 0}, "Ночь": {"sheets": 0, "tons": 0.0, "plan_sheets": 3300, "plan_tons": 3300 * 19.6 / 1000.0, "first_grade": 0, "defect": 0}} for i in range(num_days)}
-    }
+    if shift_number is not None:
+        # Initialize plans to 0, because we will populate only matching shifts from pb
+        data = {
+            "line_1": {str(sd + timedelta(days=i)): {"День": {"sheets": 0, "tons": 0.0, "plan_sheets": 0, "plan_tons": 0.0, "first_grade": 0, "defect": 0}, "Ночь": {"sheets": 0, "tons": 0.0, "plan_sheets": 0, "plan_tons": 0.0, "first_grade": 0, "defect": 0}} for i in range(num_days)},
+            "line_2": {str(sd + timedelta(days=i)): {"День": {"sheets": 0, "tons": 0.0, "plan_sheets": 0, "plan_tons": 0.0, "first_grade": 0, "defect": 0}, "Ночь": {"sheets": 0, "tons": 0.0, "plan_sheets": 0, "plan_tons": 0.0, "first_grade": 0, "defect": 0}} for i in range(num_days)}
+        }
+    else:
+        # Default initialization with standard norms
+        data = {
+            "line_1": {str(sd + timedelta(days=i)): {"День": {"sheets": 0, "tons": 0.0, "plan_sheets": (0 if (sd + timedelta(days=i)).weekday() == 0 else 2700), "plan_tons": (0 if (sd + timedelta(days=i)).weekday() == 0 else 2700) * 19.6 / 1000.0, "first_grade": 0, "defect": 0}, "Ночь": {"sheets": 0, "tons": 0.0, "plan_sheets": 3300, "plan_tons": 3300 * 19.6 / 1000.0, "first_grade": 0, "defect": 0}} for i in range(num_days)},
+            "line_2": {str(sd + timedelta(days=i)): {"День": {"sheets": 0, "tons": 0.0, "plan_sheets": (0 if (sd + timedelta(days=i)).weekday() == 0 else 2700), "plan_tons": (0 if (sd + timedelta(days=i)).weekday() == 0 else 2700) * 19.6 / 1000.0, "first_grade": 0, "defect": 0}, "Ночь": {"sheets": 0, "tons": 0.0, "plan_sheets": 3300, "plan_tons": 3300 * 19.6 / 1000.0, "first_grade": 0, "defect": 0}} for i in range(num_days)}
+        }
     
+    pb_map = {}
     for pb in plan_boards:
+        pb_map[(pb.date, pb.shift_name, pb.line)] = pb
+        
         day_key = str(pb.date)
         line_key = "line_1" if pb.line == "ЛФМ-1" else "line_2"
         s_name = pb.shift_name
         if day_key in data[line_key] and s_name in ["День", "Ночь"]:
+            if shift_number is not None and pb.shift_number != shift_number:
+                continue
             data[line_key][day_key][s_name]["plan_sheets"] = pb.plan_sheets or 0
             data[line_key][day_key][s_name]["sheets"] = pb.fact_sheets or 0
             data[line_key][day_key][s_name]["plan_tons"] = (pb.plan_sheets or 0) * 19.6 / 1000.0
@@ -584,6 +739,12 @@ def get_daily_report(start_date: str, end_date: str = None, line: str = None, db
         if day_key not in data[line_key]:
             continue
             
+        if shift_number is not None:
+            pb_line_name = "ЛФМ-1" if "1" in s.line else "ЛФМ-2"
+            pb_entry = pb_map.get((s.date, s.shift_name, pb_line_name))
+            if pb_entry is None or pb_entry.shift_number != shift_number:
+                continue
+            
         total_w = 0
         total_s = 0
         for r in s.lfm_reports:
@@ -594,8 +755,7 @@ def get_daily_report(start_date: str, end_date: str = None, line: str = None, db
             total_s += r.lfm_sheets
             
         if total_s > 0:
-            # Если есть введенные данные в систему, они приоритетнее или дополняют
-            if data[line_key][day_key][s_name]["sheets"] == 0:
+            if data[line_key][day_key][s_name]["sheets"] == 0 or shift_number is not None:
                 data[line_key][day_key][s_name]["sheets"] = total_s
             avg_w = total_w / total_s
             

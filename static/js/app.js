@@ -60,8 +60,74 @@ function toggleTheme() {
     }
 }
 
+let ssoActive = false;
+
+function showSsoLogin() {
+    const ssoSection = document.getElementById('sso-section');
+    const userSelectionSection = document.getElementById('user-selection-section');
+    if (ssoSection) ssoSection.style.display = 'block';
+    if (userSelectionSection) userSelectionSection.style.display = 'none';
+}
+
+function showPinLoginLegacy() {
+    const ssoSection = document.getElementById('sso-section');
+    const userSelectionSection = document.getElementById('user-selection-section');
+    if (ssoSection) ssoSection.style.display = 'none';
+    if (userSelectionSection) userSelectionSection.style.display = 'block';
+    
+    const backToSsoBtn = document.getElementById('back-to-sso-container');
+    if (backToSsoBtn && ssoActive) {
+        backToSsoBtn.style.display = 'block';
+    }
+}
+
+function setupTimePickers() {
+    flatpickr('.time-picker', {
+        enableTime: true,
+        noCalendar: true,
+        dateFormat: "H:i",
+        time_24hr: true,
+        locale: "ru"
+    });
+}
+
 async function init() {
     initTheme();
+    
+    // Check if the user is already authenticated on the server
+    try {
+        const meRes = await fetch('/api/me/');
+        if (meRes.ok) {
+            const meData = await meRes.json();
+            ssoActive = !!meData.sso_enabled;
+            
+            if (meData.authenticated) {
+                currentUser = meData.user;
+                document.getElementById('login-screen').style.display = 'none';
+                document.getElementById('main-app').style.display = 'block';
+                document.getElementById('user-info-container').style.display = 'flex';
+                document.getElementById('user-greeting-name').innerText = currentUser.name;
+                document.getElementById('user-greeting-role').innerText = currentUser.role;
+                
+                applyRoleVisibility();
+                loadData();
+                setupTimePickers();
+                return;
+            } else {
+                if (meData.sso_enabled) {
+                    showSsoLogin();
+                } else {
+                    const ssoSection = document.getElementById('sso-section');
+                    const userSelectionSection = document.getElementById('user-selection-section');
+                    if (ssoSection) ssoSection.style.display = 'none';
+                    if (userSelectionSection) userSelectionSection.style.display = 'block';
+                }
+            }
+        }
+    } catch (e) {
+        console.error("Error loading session:", e);
+    }
+    
     const res = await fetch('/api/masters/');
     const masters = await res.json();
     
@@ -119,13 +185,7 @@ async function init() {
         }).join('');
     }
     
-    flatpickr('.time-picker', {
-        enableTime: true,
-        noCalendar: true,
-        dateFormat: "H:i",
-        time_24hr: true,
-        locale: "ru"
-    });
+    setupTimePickers();
 }
 
 function selectUser(name, roleName) {
@@ -175,13 +235,21 @@ async function login() {
     }
 }
 
-function logout() {
+async function logout() {
+    try {
+        await fetch('/api/auth/logout');
+    } catch(e) {
+        console.error(e);
+    }
     currentUser = null;
     document.getElementById('user-info-container').style.display = 'none';
     document.getElementById('main-app').style.display = 'none';
     document.getElementById('login-screen').style.display = 'block';
     document.getElementById('pin-input').value = '';
     document.getElementById('login-error').style.display = 'none';
+    
+    // Reset to initial screen (SSO or PIN selection)
+    init();
 }
 
 function applyRoleVisibility() {
@@ -1331,19 +1399,87 @@ async function loadDailyReport() {
     if (!dates) return;
     const { startDate, endDate } = dates;
     const line = document.getElementById('daily-report-line').value; // 'lfm1', 'lfm2'
+    const brigade = document.getElementById('daily-report-brigade').value;
+    
+    let url = `/api/dashboard/daily_report?start_date=${startDate}&end_date=${endDate}`;
+    if (brigade) {
+        url += `&shift_number=${brigade}`;
+    }
     
     try {
-        const res = await fetch(`/api/dashboard/daily_report?start_date=${startDate}&end_date=${endDate}`);
+        const res = await fetch(url);
         if (!res.ok) throw new Error("Ошибка загрузки");
         const report = await res.json();
         
         const lineData = line === 'lfm1' ? report.data.line_1 : report.data.line_2;
+        
+        // Update KPI summary cards
+        updateDailyReportKPI(lineData, report.days, report.start_date);
         
         renderDailyChart('sheets', 'chart-daily-sheets', lineData, report.days, 'sheets', report.start_date);
         renderDailyChart('tons', 'chart-daily-tons', lineData, report.days, 'tons', report.start_date);
     } catch (e) {
         console.error(e);
     }
+}
+
+function updateDailyReportKPI(lineData, daysCount, startDateStr) {
+    let shiftsCount = 0;
+    let totalSheets = 0;
+    let totalTons = 0;
+    let sumPlanPercent = 0;
+    let planPercentCount = 0;
+    let totalFirstGrade = 0;
+    let totalDefects = 0;
+
+    for (let d = 0; d < daysCount; d++) {
+        const dObj = new Date(startDateStr);
+        dObj.setDate(dObj.getDate() + d);
+        const dStr = dObj.toISOString().split('T')[0];
+
+        const dayInfo = lineData[dStr] ? lineData[dStr]["День"] : null;
+        const nightInfo = lineData[dStr] ? lineData[dStr]["Ночь"] : null;
+
+        [dayInfo, nightInfo].forEach(shiftInfo => {
+            if (!shiftInfo) return;
+
+            const sheets = shiftInfo.sheets || 0;
+            const tons = shiftInfo.tons || 0;
+            const planSheets = shiftInfo.plan_sheets || 0;
+            const firstGrade = shiftInfo.first_grade || 0;
+            const defect = shiftInfo.defect || 0;
+
+            if (planSheets > 0 || sheets > 0) {
+                shiftsCount++;
+                totalSheets += sheets;
+                totalTons += tons;
+                totalFirstGrade += firstGrade;
+                totalDefects += defect;
+
+                if (planSheets > 0) {
+                    const percent = (sheets / planSheets) * 100;
+                    sumPlanPercent += percent;
+                    planPercentCount++;
+                }
+            }
+        });
+    }
+
+    const avgPlanPercent = planPercentCount > 0 ? Math.round(sumPlanPercent / planPercentCount) : 0;
+    const totalProduced = totalFirstGrade + totalDefects;
+    const defectPercent = totalProduced > 0 ? ((totalDefects / totalProduced) * 100).toFixed(1) : "0.0";
+
+    const kpiShifts = document.getElementById('kpi-shifts-count');
+    const kpiSheets = document.getElementById('kpi-total-sheets');
+    const kpiTons = document.getElementById('kpi-total-tons');
+    const kpiPlan = document.getElementById('kpi-avg-plan-percent');
+    const kpiDefect = document.getElementById('kpi-defect-percent');
+
+    if (kpiShifts) kpiShifts.innerText = shiftsCount;
+    if (kpiSheets) kpiSheets.innerText = totalSheets.toLocaleString();
+    if (kpiTons) kpiTons.innerText = totalTons.toFixed(1);
+    if (kpiPlan) kpiPlan.innerText = avgPlanPercent + "%";
+    if (kpiDefect) kpiDefect.innerText = defectPercent + "%";
 }
 
 function renderDailyChart(chartInstanceKey, canvasId, lineData, daysCount, unit, startDateStr) {
@@ -1462,9 +1598,15 @@ async function exportDailyReportPDF() {
     if (!dates) return;
     const { startDate, endDate } = dates;
     const line = document.getElementById('daily-report-line').value;
+    const brigade = document.getElementById('daily-report-brigade').value;
+    
+    let url = `/api/dashboard/daily_report?start_date=${startDate}&end_date=${endDate}`;
+    if (brigade) {
+        url += `&shift_number=${brigade}`;
+    }
     
     try {
-        const res = await fetch(`/api/dashboard/daily_report?start_date=${startDate}&end_date=${endDate}`);
+        const res = await fetch(url);
         if (!res.ok) throw new Error("Ошибка загрузки данных с сервера");
         const report = await res.json();
         

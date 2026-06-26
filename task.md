@@ -1,0 +1,6 @@
+- [x] Добавить `psycopg2-binary` в `requirements.txt`
+- [x] Добавить поле `email` в модель `Master` (`models.py`, `schemas.py` и `main.py` - сиды)
+- [x] Написать функции для SSO (MSAL) в `main.py` (`/api/auth/login`, `/api/auth/callback`)
+- [x] Добавить эндпоинт `/api/me/` для проверки текущей сессии
+- [x] Обновить интерфейс `index.html` и логику `app.js` для поддержки входа через Microsoft
+- [x] Настроить GitHub Actions (`.github/workflows/azure.yml`)

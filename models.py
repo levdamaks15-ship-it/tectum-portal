@@ -7,6 +7,7 @@ class Master(Base):
     __tablename__ = "masters"
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True)
+    email = Column(String, unique=True, index=True, nullable=True) # Corporate email for SSO
     pin = Column(String)  # 4-значный ПИН-код
     role = Column(String, default="master") # master, zo, lfm, stacker, destacker, qcd
 

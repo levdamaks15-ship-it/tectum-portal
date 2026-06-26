@@ -134,6 +134,7 @@ class Shift(ShiftBase):
 class MasterBase(BaseModel):
     name: str
     role: str
+    email: Optional[str] = None
 
 class MasterCreate(MasterBase):
     pin: str
@@ -166,6 +167,7 @@ class MasterUpdate(BaseModel):
     name: Optional[str] = None
     role: Optional[str] = None
     pin: Optional[str] = None
+    email: Optional[str] = None
 
 class ProductNormBase(BaseModel):
     product_name: str
