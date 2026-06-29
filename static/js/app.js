@@ -329,6 +329,11 @@ function applyRoleVisibility() {
     document.getElementById('destacker-view').style.display = (role === 'destacker' || role === 'admin') ? 'block' : 'none';
     document.getElementById('qcd-view').style.display = (role === 'qcd' || role === 'admin') ? 'block' : 'none';
     document.getElementById('report-view').style.display = (role === 'master' || role === 'admin') ? 'block' : 'none';
+
+    const adminPlanControls = document.getElementById('admin-plan-controls');
+    if (adminPlanControls) {
+        adminPlanControls.style.display = (role === 'admin') ? 'block' : 'none';
+    }
 }
 
 function switchTab(tabId) {
@@ -1565,7 +1570,74 @@ function renderDailyChart(chartInstanceKey, canvasId, lineData, daysCount, unit,
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
-                legend: { labels: { color: textCol } },
+                legend: {
+                    labels: {
+                        color: textCol,
+                        generateLabels: function(chart) {
+                            return [
+                                {
+                                    text: 'План (День)',
+                                    strokeStyle: '#eab308',
+                                    lineWidth: 2,
+                                    lineDash: [5, 5],
+                                    fillStyle: 'transparent',
+                                    hidden: !chart.isDatasetVisible(0),
+                                    datasetIndex: 0
+                                },
+                                {
+                                    text: 'План (Ночь)',
+                                    strokeStyle: '#3b82f6',
+                                    lineWidth: 2,
+                                    lineDash: [5, 5],
+                                    fillStyle: 'transparent',
+                                    hidden: !chart.isDatasetVisible(1),
+                                    datasetIndex: 1
+                                },
+                                {
+                                    text: 'День (План выполнен)',
+                                    fillStyle: '#4ade80',
+                                    strokeStyle: '#4ade80',
+                                    lineWidth: 0,
+                                    hidden: !chart.isDatasetVisible(2),
+                                    datasetIndex: 2
+                                },
+                                {
+                                    text: 'День (План не выполнен)',
+                                    fillStyle: '#f87171',
+                                    strokeStyle: '#f87171',
+                                    lineWidth: 0,
+                                    hidden: !chart.isDatasetVisible(2),
+                                    datasetIndex: 2
+                                },
+                                {
+                                    text: 'Ночь (План выполнен)',
+                                    fillStyle: '#166534',
+                                    strokeStyle: '#166534',
+                                    lineWidth: 0,
+                                    hidden: !chart.isDatasetVisible(3),
+                                    datasetIndex: 3
+                                },
+                                {
+                                    text: 'Ночь (План не выполнен)',
+                                    fillStyle: '#991b1b',
+                                    strokeStyle: '#991b1b',
+                                    lineWidth: 0,
+                                    hidden: !chart.isDatasetVisible(3),
+                                    datasetIndex: 3
+                                }
+                            ];
+                        }
+                    },
+                    onClick: function(e, legendItem, legend) {
+                        const index = legendItem.datasetIndex;
+                        const ci = legend.chart;
+                        if (ci.isDatasetVisible(index)) {
+                            ci.hide(index);
+                        } else {
+                            ci.show(index);
+                        }
+                    }
+                },
                 tooltip: {
                     callbacks: {
                         afterLabel: function(context) {
@@ -2140,6 +2212,9 @@ async function loadDirectorPlanBoard() {
                         <button class="btn-edit" onclick="editDirectorPlanBoard('${p.date}', '${p.line || ''}', '${p.shift_name}', ${p.shift_number}, ${p.master_id}, ${p.plan_sheets}, ${p.fact_sheets})" style="padding: 0.25rem 0.5rem; width: auto; font-size: 0.8rem; background: var(--primary-color);">
                             <i class="fa-solid fa-pen"></i> Ред.
                         </button>
+                        <button class="btn-delete" onclick="deleteDirectorPlanBoard(${p.id})" style="padding: 0.25rem 0.5rem; width: auto; font-size: 0.8rem; background: var(--danger-color); margin-left: 0.5rem;">
+                            <i class="fa-solid fa-trash"></i> Удал.
+                        </button>
                     </td>
                 </tr>
             `;
@@ -2166,6 +2241,24 @@ function editDirectorPlanBoard(date, line, shiftName, shiftNumber, masterId, pla
     }
 }
 
+async function deleteDirectorPlanBoard(id) {
+    if (!confirm("Вы уверены, что хотите удалить эту строку из выработки?")) return;
+    try {
+        const userNameParam = currentUser ? `?user_name=${encodeURIComponent(currentUser.name)}` : '';
+        const res = await fetch(`/api/plan_board/${id}${userNameParam}`, { method: 'DELETE' });
+        if (res.ok) {
+            alert("Строка успешно удалена.");
+            loadDirectorPlanBoard();
+        } else {
+            const err = await res.json();
+            alert("Ошибка удаления: " + (err.detail || "Неизвестная ошибка"));
+        }
+    } catch (e) {
+        console.error(e);
+        alert("Сетевая ошибка при удалении.");
+    }
+}
+
 async function saveDirectorPlanBoard() {
     const data = {
         date: document.getElementById('pb-date').value,
@@ -2180,6 +2273,14 @@ async function saveDirectorPlanBoard() {
     if (!data.date || isNaN(data.master_id)) {
         alert("Заполните дату и выберите мастера");
         return;
+    }
+
+    const parsedDate = new Date(data.date);
+    const isMonday = parsedDate.getDay() === 1; // 0 is Sunday, 1 is Monday
+    if (isMonday && data.shift_name === "День" && data.plan_sheets !== 0) {
+        alert("Внимание: План на санитарный день (понедельник, дневная смена) по правилам системы должен быть равен 0. План будет автоматически сохранен как 0, факт при этом сохранится.");
+        document.getElementById('pb-plan').value = 0;
+        data.plan_sheets = 0;
     }
 
     try {
@@ -2200,6 +2301,66 @@ async function saveDirectorPlanBoard() {
     } catch (e) {
         console.error(e);
         alert("Сетевая ошибка при сохранении");
+    }
+}
+
+async function uploadAndImportExcel() {
+    const fileInput = document.getElementById('admin-excel-file');
+    if (!fileInput || fileInput.files.length === 0) {
+        alert("Пожалуйста, выберите Excel-файл для импорта (.xlsx)");
+        return;
+    }
+    
+    const file = fileInput.files[0];
+    const formData = new FormData();
+    formData.append("file", file);
+    
+    const userName = currentUser ? currentUser.name : "Администратор";
+    
+    try {
+        const res = await fetch(`/api/admin/upload_and_import_plan_board?user_name=${encodeURIComponent(userName)}`, {
+            method: 'POST',
+            body: formData
+        });
+        
+        if (res.ok) {
+            const result = await res.json();
+            alert(`Импорт успешно завершен!\nСоздано записей: ${result.created}\nОбновлено записей: ${result.updated}`);
+            loadDirectorPlanBoard();
+            fileInput.value = ''; // очистить выбор файла
+        } else {
+            const err = await res.json();
+            alert("Ошибка импорта: " + (err.detail || "Неизвестная ошибка"));
+        }
+    } catch (e) {
+        console.error(e);
+        alert("Сетевая ошибка при загрузке файла");
+    }
+}
+
+async function clearPlanBoard() {
+    if (!confirm("ВНИМАНИЕ! Вы уверены, что хотите ПОЛНОСТЬЮ удалить все записи из план-факт доски? Это действие необратимо.")) {
+        return;
+    }
+    
+    const userName = currentUser ? currentUser.name : "Администратор";
+    
+    try {
+        const res = await fetch(`/api/admin/clear_plan_board?user_name=${encodeURIComponent(userName)}`, {
+            method: 'DELETE'
+        });
+        
+        if (res.ok) {
+            const result = await res.json();
+            alert(`Все данные успешно удалены. Количество удаленных записей: ${result.deleted_count}`);
+            loadDirectorPlanBoard();
+        } else {
+            const err = await res.json();
+            alert("Ошибка очистки: " + (err.detail || "Неизвестная ошибка"));
+        }
+    } catch (e) {
+        console.error(e);
+        alert("Сетевая ошибка при отправке запроса");
     }
 }
 

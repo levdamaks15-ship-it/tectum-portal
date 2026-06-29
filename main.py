@@ -82,6 +82,15 @@ app.add_middleware(
     max_age=86400 * 30  # 30 days
 )
 
+@app.middleware("http")
+async def add_no_cache_headers(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
+
 TONS_PER_HOUR = 5.0
 PRICE_PER_TON = 100000.0
 
@@ -1506,3 +1515,129 @@ def import_plan_board(db: Session = Depends(get_db)):
     except Exception as e:
         db.rollback()
         raise HTTPException(500, f"Ошибка импорта: {str(e)}")
+
+@app.post("/api/admin/upload_and_import_plan_board")
+def upload_and_import_plan_board(file: UploadFile = File(...), user_name: str = "Администратор", db: Session = Depends(get_db)):
+    try:
+        contents = file.file.read()
+        wb = openpyxl.load_workbook(io.BytesIO(contents), data_only=True)
+        ws = wb["Выработка"] if "Выработка" in wb.sheetnames else wb.active
+        
+        count_created = 0
+        count_updated = 0
+        
+        for row in ws.iter_rows(min_row=3, values_only=True):
+            if not row or not row[0]: continue
+            
+            date_val = row[0]
+            if isinstance(date_val, datetime):
+                date_val = date_val.date()
+            elif isinstance(date_val, str):
+                try:
+                    date_val = datetime.strptime(date_val, "%d.%m.%Y").date()
+                except ValueError:
+                    try:
+                        date_val = datetime.strptime(date_val, "%Y-%m-%d").date()
+                    except ValueError:
+                        continue
+                
+            shift_name = str(row[2]) if row[2] else "День"
+            
+            line_val = str(row[3]).strip() if row[3] else "ЛФМ-1"
+            if line_val == "Линия 1":
+                line_val = "ЛФМ-1"
+            elif line_val == "Линия 2":
+                line_val = "ЛФМ-2"
+                
+            master_name = str(row[4]).strip() if row[4] else ""
+            shift_number = int(row[5]) if row[5] else 1
+            plan_sheets = int(row[6]) if len(row) > 6 and row[6] else 0
+            fact_sheets = int(row[7]) if len(row) > 7 and row[7] else 0
+            
+            if date_val.weekday() == 0 and shift_name == "День":
+                plan_sheets = 0
+            
+            first_grade = 0
+            if len(row) > 8 and row[8] is not None:
+                try: first_grade = int(row[8])
+                except: pass
+                
+            defect = 0
+            if len(row) > 9 and row[9] is not None:
+                try: defect = int(row[9])
+                except: pass
+            
+            master = db.query(models.Master).filter(models.Master.name == master_name).first()
+            if not master:
+                master = models.Master(name=master_name, pin="0000", role="master")
+                db.add(master)
+                db.commit()
+                db.refresh(master)
+                
+            existing = db.query(models.MonthlyPlanBoard).filter(
+                models.MonthlyPlanBoard.date == date_val,
+                models.MonthlyPlanBoard.shift_number == shift_number,
+                models.MonthlyPlanBoard.line == line_val
+            ).first()
+            
+            if existing:
+                existing.shift_name = shift_name
+                existing.master_id = master.id
+                existing.plan_sheets = plan_sheets
+                existing.fact_sheets = fact_sheets
+                existing.first_grade = first_grade
+                existing.defect = defect
+                count_updated += 1
+            else:
+                new_plan = models.MonthlyPlanBoard(
+                    date=date_val,
+                    shift_name=shift_name,
+                    master_id=master.id,
+                    shift_number=shift_number,
+                    line=line_val,
+                    plan_sheets=plan_sheets,
+                    fact_sheets=fact_sheets,
+                    first_grade=first_grade,
+                    defect=defect
+                )
+                db.add(new_plan)
+                count_created += 1
+                
+        db.commit()
+        
+        # Log to AuditLog
+        log = models.AuditLog(
+            user_name=user_name,
+            action="IMPORT",
+            target_table="monthly_plan_board",
+            details=f"Загрузка и импорт файла {file.filename}. Создано: {count_created}, обновлено: {count_updated}"
+        )
+        db.add(log)
+        db.commit()
+        
+        return {"status": "ok", "created": count_created, "updated": count_updated}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(500, f"Ошибка импорта: {str(e)}")
+
+@app.delete("/api/admin/clear_plan_board")
+def clear_plan_board(user_name: str = "Администратор", db: Session = Depends(get_db)):
+    try:
+        count = db.query(models.MonthlyPlanBoard).count()
+        db.query(models.MonthlyPlanBoard).delete()
+        db.commit()
+        
+        # Log to AuditLog
+        log = models.AuditLog(
+            user_name=user_name,
+            action="DELETE",
+            target_table="monthly_plan_board",
+            details=f"Полная очистка таблицы. Удалено записей: {count}"
+        )
+        db.add(log)
+        db.commit()
+        
+        return {"status": "ok", "deleted_count": count}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(500, f"Ошибка очистки: {str(e)}")
