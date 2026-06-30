@@ -49,11 +49,15 @@ class Shift(Base):
     zo_asbozurit = Column(Float, default=0)
     zo_fiberglass = Column(Float, default=0)
     zo_laprol = Column(Float, default=0)
+    zo_asbocarton = Column(Float, default=0)
     zo_asb_drain = Column(Float, default=0)
     zo_cem_drain = Column(Float, default=0)
+    lfm_asb_drain = Column(Float, default=0)
+    lfm_cem_drain = Column(Float, default=0)
     zo_batches = Column(Integer, default=0)
     
     zo_submitted = Column(Boolean, default=False)
+
     
     master = relationship("Master")
     batches = relationship("Batch", back_populates="shift")

@@ -112,11 +112,15 @@ class ShiftBase(BaseModel):
     zo_asbozurit: Optional[float] = 0
     zo_fiberglass: Optional[float] = 0
     zo_laprol: Optional[float] = 0
+    zo_asbocarton: Optional[float] = 0
     zo_asb_drain: Optional[float] = 0
     zo_cem_drain: Optional[float] = 0
+    lfm_asb_drain: Optional[float] = 0
+    lfm_cem_drain: Optional[float] = 0
     zo_batches: Optional[int] = 0
     
     zo_submitted: Optional[bool] = False
+
 
 class ShiftCreate(ShiftBase):
     master_id: int
@@ -159,8 +163,7 @@ class ZOUpdate(BaseModel):
     asbozurit: float
     fiberglass: float
     laprol: float = 0
-    asb_drain: float = 0
-    cem_drain: float = 0
+    asbocarton: float = 0
     batches: int = 0
     submitted: bool = False
 

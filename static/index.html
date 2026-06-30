@@ -199,16 +199,11 @@
                         <label>Лапрол (кг)</label>
                         <input type="number" id="zo-laprol" placeholder="0">
                     </div>
-                    
-                    <h4 style="margin-top: 1rem; color: var(--accent-color);">Сливы (Возвраты)</h4>
                     <div class="form-group">
-                        <label>Асб-слив (кг)</label>
-                        <input type="number" id="zo-asb-drain" placeholder="0">
+                        <label>Асбокартон (кг)</label>
+                        <input type="number" id="zo-asbocarton" placeholder="0">
                     </div>
-                    <div class="form-group">
-                        <label>Цем-слив (кг)</label>
-                        <input type="number" id="zo-cem-drain" placeholder="0">
-                    </div>
+
                     
                     <h4 style="margin-top: 1rem; color: var(--accent-color);">Замесы за смену</h4>
                     <div class="form-group">
@@ -268,7 +263,21 @@
                     
                     <div id="lfm-reports-list" style="margin-top:1rem; font-size: 0.9rem;"></div>
                     <div id="lfm-economics" style="margin-top: 1rem; color: var(--danger-color); font-weight: bold; font-size: 0.9rem;"></div>
+                    
+                    <div style="border-top: 1px solid var(--glass-border); margin-top: 1.5rem; padding-top: 1.5rem;" id="lfm-drains-section">
+                        <h4 style="text-align: center; margin-bottom: 1rem; color: var(--accent-color);">Сливы за смену (ЛФМ)</h4>
+                        <div class="form-group">
+                            <label>Слив асбеста (кг)</label>
+                            <input type="number" id="lfm-asb-drain" placeholder="0">
+                        </div>
+                        <div class="form-group">
+                            <label>Слив цемента (кг)</label>
+                            <input type="number" id="lfm-cem-drain" placeholder="0">
+                        </div>
+                        <button class="btn-submit-huge" onclick="saveLFMDrains()" style="background: var(--warning-color); margin-top: 0.5rem;">Сохранить сливы</button>
+                    </div>
                 </div>
+
 
                 <!-- 4. Стакер -->
                 <div class="glass-panel card" id="stacker-view">

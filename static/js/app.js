@@ -425,8 +425,9 @@ async function loadData() {
             fetchMaterialsSummary(shift.id);
         } else if (currentUser.role === 'director') {
             fetchMaterialsSummary(shift.id);
-        } else if (currentUser.role === 'zo' || currentUser.role === 'master') {
-            // Populate ZO fields if they exist
+        }
+        // Populate ZO fields if present in DOM
+        if (document.getElementById('zo-chr-4-20')) {
             document.getElementById('zo-chr-4-20').value = shift.zo_chrysotile_4_20 || '';
             document.getElementById('zo-chr-5-65').value = shift.zo_chrysotile_5_65 || '';
             document.getElementById('zo-chr-6-40').value = shift.zo_chrysotile_6_40 || '';
@@ -439,10 +440,16 @@ async function loadData() {
             document.getElementById('zo-asb').value = shift.zo_asbozurit || '';
             document.getElementById('zo-fib').value = shift.zo_fiberglass || '';
             document.getElementById('zo-laprol').value = shift.zo_laprol || '';
-            document.getElementById('zo-asb-drain').value = shift.zo_asb_drain || '';
-            document.getElementById('zo-cem-drain').value = shift.zo_cem_drain || '';
+            document.getElementById('zo-asbocarton').value = shift.zo_asbocarton || '';
             document.getElementById('zo-batches').value = shift.zo_batches || '';
         }
+
+        // Populate LFM drains if present in DOM
+        if (document.getElementById('lfm-asb-drain')) {
+            document.getElementById('lfm-asb-drain').value = shift.lfm_asb_drain || '';
+            document.getElementById('lfm-cem-drain').value = shift.lfm_cem_drain || '';
+        }
+
         
         applyShiftMode(shift);
     } else {
@@ -670,8 +677,7 @@ async function updateZO() {
         asbozurit: getNum('zo-asb'),
         fiberglass: getNum('zo-fib'),
         laprol: getNum('zo-laprol'),
-        asb_drain: getNum('zo-asb-drain'),
-        cem_drain: getNum('zo-cem-drain'),
+        asbocarton: getNum('zo-asbocarton'),
         batches: getNum('zo-batches'),
         submitted: true
     };
@@ -683,6 +689,26 @@ async function updateZO() {
     alert("Данные ЗО успешно отправлены");
     loadData();
 }
+
+async function saveLFMDrains() {
+    if (!activeShiftId) return alert("Нет активной смены");
+    const data = {
+        asb_drain: getNum('lfm-asb-drain'),
+        cem_drain: getNum('lfm-cem-drain')
+    };
+    const res = await fetch(`/api/shifts/${activeShiftId}/lfm_drains`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    });
+    if (res.ok) {
+        alert("Сливы сохранены");
+    } else {
+        alert("Ошибка при сохранении сливов");
+    }
+    loadData();
+}
+
 
 async function addLFMReport() {
     if (!activeShiftId) return alert("Нет активной смены");

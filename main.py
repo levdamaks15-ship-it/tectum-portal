@@ -62,6 +62,29 @@ async def lifespan(app: FastAPI):
         conn.commit()
         conn.close()
     except: pass
+
+    # Migrations for Shift (Asbocarton & Drains)
+    try:
+        conn = sqlite3.connect("tectum.db")
+        conn.execute("ALTER TABLE shifts ADD COLUMN zo_asbocarton FLOAT DEFAULT 0.0")
+        conn.commit()
+        conn.close()
+    except: pass
+
+    try:
+        conn = sqlite3.connect("tectum.db")
+        conn.execute("ALTER TABLE shifts ADD COLUMN lfm_asb_drain FLOAT DEFAULT 0.0")
+        conn.commit()
+        conn.close()
+    except: pass
+
+    try:
+        conn = sqlite3.connect("tectum.db")
+        conn.execute("ALTER TABLE shifts ADD COLUMN lfm_cem_drain FLOAT DEFAULT 0.0")
+        conn.commit()
+        conn.close()
+    except: pass
+
     
     db = SessionLocal()
 
@@ -366,10 +389,13 @@ class UpdateReceiptZO(BaseModel):
     asbozurit: float = 0
     fiberglass: float = 0
     laprol: float = 0
-    asb_drain: float = 0
-    cem_drain: float = 0
+    asbocarton: float = 0
     batches: int = 0
     submitted: bool = False
+
+class LFMDrainsUpdate(BaseModel):
+    asb_drain: float = 0
+    cem_drain: float = 0
 
 @app.post("/api/shifts/{shift_id}/receipt")
 def update_receipt(shift_id: int, data: UpdateReceiptZO, db: Session = Depends(get_db)):
@@ -408,14 +434,22 @@ def update_zo(shift_id: int, data: UpdateReceiptZO, db: Session = Depends(get_db
     shift.zo_asbozurit = data.asbozurit
     shift.zo_fiberglass = data.fiberglass
     shift.zo_laprol = data.laprol
-    shift.zo_asb_drain = data.asb_drain
-    shift.zo_cem_drain = data.cem_drain
+    shift.zo_asbocarton = data.asbocarton
     shift.zo_batches = data.batches
-    
     shift.zo_submitted = data.submitted
     
     db.commit()
     return {"message": "ZO updated"}
+
+@app.post("/api/shifts/{shift_id}/lfm_drains")
+def update_lfm_drains(shift_id: int, data: LFMDrainsUpdate, db: Session = Depends(get_db)):
+    shift = db.query(models.Shift).get(shift_id)
+    if not shift: raise HTTPException(404, "Смена не найдена")
+    shift.lfm_asb_drain = data.asb_drain
+    shift.lfm_cem_drain = data.cem_drain
+    db.commit()
+    return {"message": "LFM drains updated"}
+
 
 def sync_lfm_to_plan_board(shift_id: int, db: Session):
     shift = db.query(models.Shift).get(shift_id)
@@ -1462,8 +1496,11 @@ def get_materials_report(shift_id: int, db: Session = Depends(get_db)):
         ("Целлюлоза", shift.zo_cellulose, theoretical["cellulose"]),
         ("Дробленый шифер", shift.zo_crushed_slate, theoretical["crushed_slate"]),
         ("Асбозурит", shift.zo_asbozurit, theoretical["asbozurit"]),
-        ("Стекловолокно", shift.zo_fiberglass, theoretical["fiberglass"])
+        ("Стекловолокно", shift.zo_fiberglass, theoretical["fiberglass"]),
+        ("Лапрол", shift.zo_laprol, 0.0),
+        ("Асбокартон", shift.zo_asbocarton, 0.0)
     ]
+
     
     total_sheets = sum(product_counts.values())
     
