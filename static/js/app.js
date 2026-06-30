@@ -412,7 +412,7 @@ async function loadData() {
         const lfmList = document.getElementById('lfm-reports-list');
         if(lfmList) {
             lfmList.innerHTML = shift.lfm_reports.map(r => 
-                `<div>- ${r.product_name}: ${r.lfm_sheets} шт, Сброс: ${r.lfm_wind_resets} шт, 1 сорт: ${r.formed_1st_grade || 0}, Брак: ${r.formed_defect || 0}, На склад: ${r.transferred_to_warehouse || 0}</div>`
+                `<div>- ${r.product_name}: ${r.lfm_sheets} шт, Сбросы наката: ${r.lfm_wind_resets} шт</div>`
             ).join('');
         }
         
@@ -535,7 +535,7 @@ async function viewShift(shiftId) {
     const lfmList = document.getElementById('lfm-reports-list');
     if(lfmList) {
         lfmList.innerHTML = (shift.lfm_reports || []).map(r => 
-            `<div>- ${r.product_name}: ${r.lfm_sheets} шт, Сброс: ${r.lfm_wind_resets} шт, 1 сорт: ${r.formed_1st_grade || 0}, Брак: ${r.formed_defect || 0}, На склад: ${r.transferred_to_warehouse || 0}</div>`
+            `<div>- ${r.product_name}: ${r.lfm_sheets} шт, Сбросы наката: ${r.lfm_wind_resets} шт</div>`
         ).join('');
     }
     
@@ -715,21 +715,22 @@ async function addLFMReport() {
     const product_name = document.getElementById('lfm-product').value;
     const lfm_sheets = getNum('lfm-sheets');
     const lfm_wind_resets = getNum('lfm-resets');
-    const formed_1st_grade = getNum('lfm-1st');
-    const formed_defect = getNum('lfm-defect');
-    const transferred_to_warehouse = getNum('lfm-warehouse');
     
     await fetch(`/api/shifts/${activeShiftId}/lfm`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ product_name, lfm_sheets, lfm_wind_resets, formed_1st_grade, formed_defect, transferred_to_warehouse })
+        body: JSON.stringify({
+            product_name,
+            lfm_sheets,
+            lfm_wind_resets,
+            formed_1st_grade: 0,
+            formed_defect: 0,
+            transferred_to_warehouse: 0
+        })
     });
     alert("Отчет добавлен");
     document.getElementById('lfm-sheets').value = '';
     document.getElementById('lfm-resets').value = '';
-    document.getElementById('lfm-1st').value = '';
-    document.getElementById('lfm-defect').value = '';
-    document.getElementById('lfm-warehouse').value = '';
     loadData();
 }
 
