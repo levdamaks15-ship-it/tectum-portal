@@ -448,7 +448,7 @@ async function loadData() {
     }
     
     // Загрузка списков партий для Разборщика и СКК
-    if (currentUser.role === 'destacker') {
+    if (currentUser.role === 'destacker' || currentUser.role === 'admin') {
         const dsRes = await fetch('/api/batches/pending_destacker');
         const dsBatches = await dsRes.json();
         document.getElementById('ds-batch-select').innerHTML = dsBatches.map(b => 
@@ -456,7 +456,7 @@ async function loadData() {
         ).join('') || '<option value="">Нет партий</option>';
     }
     
-    if (currentUser.role === 'qcd') {
+    if (currentUser.role === 'qcd' || currentUser.role === 'admin') {
         const qcdRes = await fetch('/api/batches/pending_qcd');
         const qcdBatches = await qcdRes.json();
         document.getElementById('qcd-batch-select').innerHTML = qcdBatches.map(b => 
