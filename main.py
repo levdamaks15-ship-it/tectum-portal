@@ -1305,7 +1305,7 @@ def admin_update_shift(shift_id: int, data: dict, request: Request, db: Session 
     
     if "date" in data and data["date"]:
         try:
-            data["date"] = datetime.datetime.strptime(data["date"], "%Y-%m-%d").date()
+            data["date"] = datetime.strptime(data["date"], "%Y-%m-%d").date()
         except Exception:
             pass
             
@@ -1319,7 +1319,7 @@ def admin_update_shift(shift_id: int, data: dict, request: Request, db: Session 
                 
     if old_values:
         log_entry = models.AuditLog(
-            timestamp=datetime.datetime.utcnow(),
+            timestamp=datetime.utcnow(),
             user_name=admin.name,
             action=f"Редактирование смены ID {shift_id}",
             details=f"Изменено: {old_values} -> {new_values}"
@@ -1341,7 +1341,7 @@ def admin_delete_shift(shift_id: int, request: Request, db: Session = Depends(ge
     db.query(models.Downtime).filter(models.Downtime.shift_id == shift_id).delete()
     
     log_entry = models.AuditLog(
-        timestamp=datetime.datetime.utcnow(),
+        timestamp=datetime.utcnow(),
         user_name=admin.name,
         action=f"Удаление смены ID {shift_id}",
         details=f"Удалена смена за {shift.date} ({shift.shift_name}, Линия {shift.line}) и все связанные с ней отчеты, партии и простои."
@@ -1369,7 +1369,7 @@ def admin_update_lfm(report_id: int, data: dict, request: Request, db: Session =
                 
     if old_values:
         log_entry = models.AuditLog(
-            timestamp=datetime.datetime.utcnow(),
+            timestamp=datetime.utcnow(),
             user_name=admin.name,
             action=f"Редактирование отчета ЛФМ ID {report_id}",
             details=f"Смена {report.shift_id}. Изменено: {old_values} -> {new_values}"
@@ -1387,7 +1387,7 @@ def admin_delete_lfm(report_id: int, request: Request, db: Session = Depends(get
     if not report: raise HTTPException(404, "Отчет ЛФМ не найден")
     
     log_entry = models.AuditLog(
-        timestamp=datetime.datetime.utcnow(),
+        timestamp=datetime.utcnow(),
         user_name=admin.name,
         action=f"Удаление отчета ЛФМ ID {report_id}",
         details=f"Смена {report.shift_id}. Удалена продукция: {report.product_name}, листы: {report.lfm_sheets}."
@@ -1415,7 +1415,7 @@ def admin_update_batch(batch_id: int, data: dict, request: Request, db: Session 
                 
     if old_values:
         log_entry = models.AuditLog(
-            timestamp=datetime.datetime.utcnow(),
+            timestamp=datetime.utcnow(),
             user_name=admin.name,
             action=f"Редактирование партии ID {batch_id}",
             details=f"Смена {batch.shift_id}. Изменено: {old_values} -> {new_values}"
@@ -1433,7 +1433,7 @@ def admin_delete_batch(batch_id: int, request: Request, db: Session = Depends(ge
     if not batch: raise HTTPException(404, "Партия не найдена")
     
     log_entry = models.AuditLog(
-        timestamp=datetime.datetime.utcnow(),
+        timestamp=datetime.utcnow(),
         user_name=admin.name,
         action=f"Удаление партии ID {batch_id}",
         details=f"Смена {batch.shift_id}. Удален номер партии: {batch.batch_number}, продукция: {batch.product_name}."
@@ -1461,7 +1461,7 @@ def admin_update_downtime(downtime_id: int, data: dict, request: Request, db: Se
                 
     if old_values:
         log_entry = models.AuditLog(
-            timestamp=datetime.datetime.utcnow(),
+            timestamp=datetime.utcnow(),
             user_name=admin.name,
             action=f"Редактирование простоя ID {downtime_id}",
             details=f"Смена {dt.shift_id}. Изменено: {old_values} -> {new_values}"
@@ -1479,10 +1479,10 @@ def admin_delete_downtime(downtime_id: int, request: Request, db: Session = Depe
     if not dt: raise HTTPException(404, "Простой не найден")
     
     log_entry = models.AuditLog(
-        timestamp=datetime.datetime.utcnow(),
+        timestamp=datetime.utcnow(),
         user_name=admin.name,
         action=f"Удаление простоя ID {downtime_id}",
-        details=f"Смена {dt.shift_id}. Удалена причина: {dt.reason}, длительность: {dt.duration_minutes} мин."
+        details=f"Смена {dt.shift_id}. Удалено описание: {dt.description}, длительность: {dt.duration} мин."
     )
     db.add(log_entry)
     db.delete(dt)
