@@ -259,6 +259,7 @@ function applyRoleVisibility() {
     if(tabsMenu) tabsMenu.style.display = 'none';
     
     const btnProd = document.getElementById('tab-btn-production');
+    const btnReceipt = document.getElementById('tab-btn-receipt');
     const btnDown = document.getElementById('tab-btn-downtimes');
     const btnDash = document.getElementById('tab-btn-dashboard');
     const btnMats = document.getElementById('tab-btn-materials');
@@ -267,6 +268,7 @@ function applyRoleVisibility() {
     const btnWeekly = document.getElementById('tab-btn-weekly-report');
     const btnPlanBoard = document.getElementById('tab-btn-plan-board');
     if(btnProd) btnProd.style.display = 'none';
+    if(btnReceipt) btnReceipt.style.display = 'none';
     if(btnDown) btnDown.style.display = 'none';
     if(btnDash) btnDash.style.display = 'none';
     if(btnMats) btnMats.style.display = 'none';
@@ -280,6 +282,7 @@ function applyRoleVisibility() {
         
         if (role === 'admin') {
             if(btnProd) btnProd.style.display = 'inline-block';
+            if(btnReceipt) btnReceipt.style.display = 'inline-block';
             if(btnDown) btnDown.style.display = 'inline-block';
             if(btnDash) btnDash.style.display = 'inline-block';
             if(btnMats) btnMats.style.display = 'inline-block';
@@ -290,12 +293,15 @@ function applyRoleVisibility() {
             switchTab('dashboard');
         } else if (role === 'master') {
             if(btnProd) btnProd.style.display = 'inline-block';
+            if(btnReceipt) btnReceipt.style.display = 'inline-block';
             if(btnDown) btnDown.style.display = 'inline-block';
+            if(btnDash) btnDash.style.display = 'inline-block';
             if(btnMats) btnMats.style.display = 'inline-block';
             if(btnArch) btnArch.style.display = 'inline-block';
             if(btnDaily) btnDaily.style.display = 'inline-block';
             if(btnWeekly) btnWeekly.style.display = 'inline-block';
-            switchTab('production');
+            if(btnPlanBoard) btnPlanBoard.style.display = 'inline-block';
+            switchTab('dashboard');
         } else if (role === 'director') {
             if(btnDown) btnDown.style.display = 'inline-block';
             if(btnDash) btnDash.style.display = 'inline-block';
@@ -342,6 +348,7 @@ function switchTab(tabId) {
     if(btn) btn.classList.add('active');
     
     const prod = document.getElementById('production-tab');
+    const receipt = document.getElementById('receipt-tab');
     const down = document.getElementById('downtimes-tab');
     const dash = document.getElementById('dashboard-tab');
     const mats = document.getElementById('materials-tab');
@@ -351,6 +358,7 @@ function switchTab(tabId) {
     const planBoard = document.getElementById('plan-board-tab');
     
     if(prod) prod.style.display = 'none';
+    if(receipt) receipt.style.display = 'none';
     if(down) down.style.display = 'none';
     if(dash) dash.style.display = 'none';
     if(mats) mats.style.display = 'none';
