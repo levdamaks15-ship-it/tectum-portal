@@ -1880,11 +1880,13 @@ def create_or_update_plan_board(data: schemas.MonthlyPlanBoardCreate, user_name:
         existing.shift_number = data.shift_number
         existing.plan_sheets = data.plan_sheets
         existing.fact_sheets = data.fact_sheets
+        existing.first_grade = data.first_grade
+        existing.defect = data.defect
         db.commit()
         db.refresh(existing)
         
         # Log to AuditLog
-        details_str = f"Дата: {data.date}, Смена: {data.shift_name}, Линия: {data.line}. План: {old_plan}->{data.plan_sheets}, Факт: {old_fact}->{data.fact_sheets}"
+        details_str = f"Дата: {data.date}, Смена: {data.shift_name}, Линия: {data.line}. План: {old_plan}->{data.plan_sheets}, Факт: {old_fact}->{data.fact_sheets}, 1-й сорт: {data.first_grade}, Брак: {data.defect}"
         log = models.AuditLog(
             user_name=user_name,
             action="UPDATE",
@@ -1915,6 +1917,12 @@ def create_or_update_plan_board(data: schemas.MonthlyPlanBoardCreate, user_name:
         db.commit()
         
         return new_plan
+
+@app.get("/api/plan_board/{id}", response_model=schemas.MonthlyPlanBoard)
+def get_plan_board_row(id: int, db: Session = Depends(get_db)):
+    row = db.query(models.MonthlyPlanBoard).get(id)
+    if not row: raise HTTPException(404, "Запись не найдена")
+    return row
 
 @app.delete("/api/plan_board/{id}")
 def delete_plan_board_row(id: int, user_name: str = None, db: Session = Depends(get_db)):

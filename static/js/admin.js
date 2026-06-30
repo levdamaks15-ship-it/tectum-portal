@@ -330,9 +330,14 @@ async function loadPlanBoard() {
             const masterName = p.master ? p.master.name : 'Н/Д';
             
             const actionsHtml = isAdmin ? `
-                <button class="btn-danger" style="padding: 0.25rem 0.5rem; width: auto; font-size: 0.8rem;" onclick="deletePlanBoardRow(${p.id})">
-                    <i class="fa-solid fa-trash"></i> Удалить
-                </button>
+                <div style="display: flex; gap: 0.25rem;">
+                    <button class="btn-edit" style="padding: 0.25rem 0.5rem; width: auto; font-size: 0.8rem; background: var(--warning-color);" onclick="editPlanBoardRow(${p.id})">
+                        <i class="fa-solid fa-edit"></i> Ред.
+                    </button>
+                    <button class="btn-danger" style="padding: 0.25rem 0.5rem; width: auto; font-size: 0.8rem;" onclick="deletePlanBoardRow(${p.id})">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </div>
             ` : `<span style="color: var(--text-secondary); font-size: 0.85rem;">Нет прав</span>`;
             
             tbody.innerHTML += `
@@ -354,6 +359,89 @@ async function loadPlanBoard() {
         console.error(e);
         const tbody = document.getElementById('plan-board-table-body');
         if (tbody) tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:red;">Ошибка загрузки данных</td></tr>`;
+    }
+}
+
+function populatePlanBoardMasters(selectedId) {
+    const masterSelect = document.getElementById('edit-pb-master');
+    if (!masterSelect) return;
+    masterSelect.innerHTML = '';
+    allMastersCached.filter(m => m.role === 'master').forEach(m => {
+        const selected = m.id === selectedId ? 'selected' : '';
+        masterSelect.innerHTML += `<option value="${m.id}" ${selected}>${m.name}</option>`;
+    });
+}
+
+function showAddPlanBoardModal() {
+    document.getElementById('plan-board-modal-title').innerText = "Добавить запись выработки";
+    document.getElementById('edit-pb-id').value = '';
+    document.getElementById('edit-pb-date').value = new Date().toISOString().split('T')[0];
+    document.getElementById('edit-pb-line').value = 'ЛФМ-1';
+    document.getElementById('edit-pb-shift-name').value = 'День';
+    document.getElementById('edit-pb-shift-number').value = '1';
+    document.getElementById('edit-pb-plan-sheets').value = '0';
+    document.getElementById('edit-pb-fact-sheets').value = '0';
+    document.getElementById('edit-pb-first-grade').value = '0';
+    document.getElementById('edit-pb-defect').value = '0';
+    
+    populatePlanBoardMasters(null);
+    document.getElementById('edit-plan-board-modal').style.display = 'flex';
+}
+
+async function editPlanBoardRow(id) {
+    try {
+        const res = await fetch(`/api/plan_board/${id}`);
+        if (!res.ok) throw new Error("Не удалось загрузить запись выработки");
+        const row = await res.json();
+        
+        document.getElementById('plan-board-modal-title').innerText = "Редактировать запись выработки";
+        document.getElementById('edit-pb-id').value = row.id;
+        document.getElementById('edit-pb-date').value = row.date;
+        document.getElementById('edit-pb-line').value = row.line || 'ЛФМ-1';
+        document.getElementById('edit-pb-shift-name').value = row.shift_name;
+        document.getElementById('edit-pb-shift-number').value = row.shift_number;
+        document.getElementById('edit-pb-plan-sheets').value = row.plan_sheets;
+        document.getElementById('edit-pb-fact-sheets').value = row.fact_sheets;
+        document.getElementById('edit-pb-first-grade').value = row.first_grade || 0;
+        document.getElementById('edit-pb-defect').value = row.defect || 0;
+        
+        populatePlanBoardMasters(row.master_id);
+        document.getElementById('edit-plan-board-modal').style.display = 'flex';
+    } catch(e) {
+        console.error(e);
+        alert(e.message);
+    }
+}
+
+async function savePlanBoardEdit() {
+    const id = document.getElementById('edit-pb-id').value;
+    const data = {
+        date: document.getElementById('edit-pb-date').value,
+        line: document.getElementById('edit-pb-line').value,
+        shift_name: document.getElementById('edit-pb-shift-name').value,
+        shift_number: parseInt(document.getElementById('edit-pb-shift-number').value) || 1,
+        master_id: parseInt(document.getElementById('edit-pb-master').value),
+        plan_sheets: parseInt(document.getElementById('edit-pb-plan-sheets').value) || 0,
+        fact_sheets: parseInt(document.getElementById('edit-pb-fact-sheets').value) || 0,
+        first_grade: parseInt(document.getElementById('edit-pb-first-grade').value) || 0,
+        defect: parseInt(document.getElementById('edit-pb-defect').value) || 0
+    };
+    
+    const userNameParam = currentAdmin ? encodeURIComponent(currentAdmin.name) : '';
+    try {
+        const res = await fetch(`/api/plan_board?user_name=${userNameParam}`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+        if (res.ok) {
+            document.getElementById('edit-plan-board-modal').style.display = 'none';
+            loadPlanBoard();
+        } else {
+            alert("Ошибка сохранения выработки");
+        }
+    } catch(e) {
+        console.error(e);
     }
 }
 
@@ -696,6 +784,7 @@ function editLfmRow(r) {
     document.getElementById('edit-lfm-wind-resets').value = r.lfm_wind_resets;
     document.getElementById('edit-lfm-formed-1st').value = r.formed_1st_grade;
     document.getElementById('edit-lfm-formed-defect').value = r.formed_defect;
+    document.getElementById('edit-lfm-transferred').value = r.transferred_to_warehouse || 0;
     document.getElementById('edit-lfm-modal').style.display = 'flex';
 }
 
@@ -706,7 +795,8 @@ async function saveLfmEdit() {
         lfm_sheets: parseInt(document.getElementById('edit-lfm-sheets').value) || 0,
         lfm_wind_resets: parseInt(document.getElementById('edit-lfm-wind-resets').value) || 0,
         formed_1st_grade: parseInt(document.getElementById('edit-lfm-formed-1st').value) || 0,
-        formed_defect: parseInt(document.getElementById('edit-lfm-formed-defect').value) || 0
+        formed_defect: parseInt(document.getElementById('edit-lfm-formed-defect').value) || 0,
+        transferred_to_warehouse: parseInt(document.getElementById('edit-lfm-transferred').value) || 0
     };
     try {
         const res = await fetch(`/api/admin/lfm/${id}`, {
@@ -744,10 +834,25 @@ function editBatchRow(b) {
     document.getElementById('edit-batch-number').value = b.batch_number;
     document.getElementById('edit-batch-product').value = b.product_name;
     document.getElementById('edit-batch-stacked-stacks').value = b.stacked_stacks;
-    document.getElementById('edit-batch-ds-first-grade').value = b.ds_first_grade;
-    document.getElementById('edit-batch-ds-defect').value = b.ds_defect;
-    document.getElementById('edit-batch-qcd-first-grade').value = b.qcd_first_grade;
-    document.getElementById('edit-batch-qcd-defect').value = b.qcd_defect;
+    document.getElementById('edit-batch-ds-condition').value = b.ds_condition || 0;
+    document.getElementById('edit-batch-ds-first-grade').value = b.ds_first_grade || 0;
+    document.getElementById('edit-batch-ds-defect').value = b.ds_defect || 0;
+
+    document.getElementById('edit-batch-ds-defect-chip').value = b.ds_defect_chip || 0;
+    document.getElementById('edit-batch-ds-defect-scratch').value = b.ds_defect_scratch || 0;
+    document.getElementById('edit-batch-ds-defect-bad-cut').value = b.ds_defect_bad_cut || 0;
+    document.getElementById('edit-batch-ds-defect-stick-bottom').value = b.ds_defect_stick_bottom || 0;
+    document.getElementById('edit-batch-ds-defect-stick-top').value = b.ds_defect_stick_top || 0;
+    document.getElementById('edit-batch-ds-defect-broken').value = b.ds_defect_broken || 0;
+    document.getElementById('edit-batch-ds-defect-fell-box').value = b.ds_defect_fell_box || 0;
+    document.getElementById('edit-batch-ds-defect-dent').value = b.ds_defect_dent || 0;
+    document.getElementById('edit-batch-ds-defect-thickness').value = b.ds_defect_thickness || 0;
+    document.getElementById('edit-batch-ds-defect-delamination').value = b.ds_defect_delamination || 0;
+    document.getElementById('edit-batch-ds-defect-edge').value = b.ds_defect_edge || 0;
+
+    document.getElementById('edit-batch-qcd-condition').value = b.qcd_condition || 0;
+    document.getElementById('edit-batch-qcd-first-grade').value = b.qcd_first_grade || 0;
+    document.getElementById('edit-batch-qcd-defect').value = b.qcd_defect || 0;
     document.getElementById('edit-batch-modal').style.display = 'flex';
 }
 
@@ -757,8 +862,23 @@ async function saveBatchEdit() {
         batch_number: document.getElementById('edit-batch-number').value,
         product_name: document.getElementById('edit-batch-product').value,
         stacked_stacks: parseInt(document.getElementById('edit-batch-stacked-stacks').value) || 0,
+        ds_condition: parseInt(document.getElementById('edit-batch-ds-condition').value) || 0,
         ds_first_grade: parseInt(document.getElementById('edit-batch-ds-first-grade').value) || 0,
         ds_defect: parseInt(document.getElementById('edit-batch-ds-defect').value) || 0,
+
+        ds_defect_chip: parseInt(document.getElementById('edit-batch-ds-defect-chip').value) || 0,
+        ds_defect_scratch: parseInt(document.getElementById('edit-batch-ds-defect-scratch').value) || 0,
+        ds_defect_bad_cut: parseInt(document.getElementById('edit-batch-ds-defect-bad-cut').value) || 0,
+        ds_defect_stick_bottom: parseInt(document.getElementById('edit-batch-ds-defect-stick-bottom').value) || 0,
+        ds_defect_stick_top: parseInt(document.getElementById('edit-batch-ds-defect-stick-top').value) || 0,
+        ds_defect_broken: parseInt(document.getElementById('edit-batch-ds-defect-broken').value) || 0,
+        ds_defect_fell_box: parseInt(document.getElementById('edit-batch-ds-defect-fell-box').value) || 0,
+        ds_defect_dent: parseInt(document.getElementById('edit-batch-ds-defect-dent').value) || 0,
+        ds_defect_thickness: parseInt(document.getElementById('edit-batch-ds-defect-thickness').value) || 0,
+        ds_defect_delamination: parseInt(document.getElementById('edit-batch-ds-defect-delamination').value) || 0,
+        ds_defect_edge: parseInt(document.getElementById('edit-batch-ds-defect-edge').value) || 0,
+
+        qcd_condition: parseInt(document.getElementById('edit-batch-qcd-condition').value) || 0,
         qcd_first_grade: parseInt(document.getElementById('edit-batch-qcd-first-grade').value) || 0,
         qcd_defect: parseInt(document.getElementById('edit-batch-qcd-defect').value) || 0
     };
@@ -796,8 +916,14 @@ async function deleteBatchRow(id) {
 function editDowntimeRow(d) {
     document.getElementById('edit-downtime-id').value = d.id;
     document.getElementById('edit-downtime-time').value = d.start_time || '';
+    document.getElementById('edit-downtime-end-time').value = d.end_time || '';
     document.getElementById('edit-downtime-duration').value = d.duration || 0;
+    document.getElementById('edit-downtime-department').value = d.department || '';
+    document.getElementById('edit-downtime-node').value = d.node || '';
     document.getElementById('edit-downtime-reason').value = d.description || '';
+    document.getElementById('edit-downtime-lost-tons').value = d.lost_tons || 0;
+    document.getElementById('edit-downtime-lost-tenge').value = d.lost_tenge || 0;
+    document.getElementById('edit-downtime-status').value = d.status || 'pending';
     document.getElementById('edit-downtime-category').value = d.category || 'Механические';
     document.getElementById('edit-downtime-modal').style.display = 'flex';
 }
@@ -806,8 +932,14 @@ async function saveDowntimeEdit() {
     const id = document.getElementById('edit-downtime-id').value;
     const data = {
         start_time: document.getElementById('edit-downtime-time').value || null,
+        end_time: document.getElementById('edit-downtime-end-time').value || null,
         duration: parseInt(document.getElementById('edit-downtime-duration').value) || 0,
+        department: document.getElementById('edit-downtime-department').value || null,
+        node: document.getElementById('edit-downtime-node').value || '',
         description: document.getElementById('edit-downtime-reason').value,
+        lost_tons: parseFloat(document.getElementById('edit-downtime-lost-tons').value) || 0.0,
+        lost_tenge: parseFloat(document.getElementById('edit-downtime-lost-tenge').value) || 0.0,
+        status: document.getElementById('edit-downtime-status').value || 'pending',
         category: document.getElementById('edit-downtime-category').value
     };
     try {

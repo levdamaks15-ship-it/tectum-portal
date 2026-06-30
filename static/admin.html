@@ -178,7 +178,10 @@
             <div id="tab-plan-board" style="display: none;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
                     <h2>Выработка (План/Факт)</h2>
-                    <button onclick="importPlanBoard()" style="width: auto; padding: 0.5rem 1rem; background: #217346;"><i class="fa-solid fa-file-excel"></i> Импортировать из Excel</button>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <button onclick="importPlanBoard()" style="width: auto; padding: 0.5rem 1rem; background: #217346;"><i class="fa-solid fa-file-excel"></i> Импортировать из Excel</button>
+                        <button onclick="showAddPlanBoardModal()" style="width: auto; padding: 0.5rem 1rem; background: var(--success-color);"><i class="fa-solid fa-plus"></i> Добавить запись</button>
+                    </div>
                 </div>
                 <div class="glass-panel" style="overflow-x: auto;">
                     <table class="data-table" style="width: 100%; text-align: left;">
@@ -525,6 +528,7 @@
             <div class="form-group"><label>Сбросы</label><input type="number" id="edit-lfm-wind-resets"></div>
             <div class="form-group"><label>1 сорт</label><input type="number" id="edit-lfm-formed-1st"></div>
             <div class="form-group"><label>Брак</label><input type="number" id="edit-lfm-formed-defect"></div>
+            <div class="form-group"><label>Передано на склад</label><input type="number" id="edit-lfm-transferred"></div>
             <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
                 <button onclick="document.getElementById('edit-lfm-modal').style.display='none'" style="background: transparent; border: 1px solid var(--glass-border);">Отмена</button>
                 <button onclick="saveLfmEdit()" class="btn-save">Сохранить</button>
@@ -542,14 +546,31 @@
             <div class="form-group"><label>Разобранных стоп</label><input type="number" id="edit-batch-stacked-stacks"></div>
             
             <h5>Дестакер (Данные разборки)</h5>
-            <div class="form-grid" style="grid-template-columns: 1fr 1fr; gap: 0.5rem;">
-                <div class="form-group"><label>Годных</label><input type="number" id="edit-batch-ds-first-grade"></div>
-                <div class="form-group"><label>Брак</label><input type="number" id="edit-batch-ds-defect"></div>
+            <div class="form-grid" style="grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem;">
+                <div class="form-group"><label>Кондиция</label><input type="number" id="edit-batch-ds-condition"></div>
+                <div class="form-group"><label>1 сорт</label><input type="number" id="edit-batch-ds-first-grade"></div>
+                <div class="form-group"><label>Брак (всего)</label><input type="number" id="edit-batch-ds-defect"></div>
+            </div>
+
+            <h6>Детализация брака Разборщика</h6>
+            <div class="form-grid" style="grid-template-columns: repeat(3, 1fr); gap: 0.5rem; border: 1px solid var(--glass-border); padding: 0.5rem; border-radius: 8px; margin-bottom: 1rem;">
+                <div class="form-group" style="margin-bottom:0;"><label style="font-size:0.75rem;">Скол</label><input type="number" id="edit-batch-ds-defect-chip" style="padding: 0.25rem;"></div>
+                <div class="form-group" style="margin-bottom:0;"><label style="font-size:0.75rem;">Сдир</label><input type="number" id="edit-batch-ds-defect-scratch" style="padding: 0.25rem;"></div>
+                <div class="form-group" style="margin-bottom:0;"><label style="font-size:0.75rem;">Плохой рез</label><input type="number" id="edit-batch-ds-defect-bad-cut" style="padding: 0.25rem;"></div>
+                <div class="form-group" style="margin-bottom:0;"><label style="font-size:0.75rem;">Налип снизу</label><input type="number" id="edit-batch-ds-defect-stick-bottom" style="padding: 0.25rem;"></div>
+                <div class="form-group" style="margin-bottom:0;"><label style="font-size:0.75rem;">Налип сверху</label><input type="number" id="edit-batch-ds-defect-stick-top" style="padding: 0.25rem;"></div>
+                <div class="form-group" style="margin-bottom:0;"><label style="font-size:0.75rem;">Сломан</label><input type="number" id="edit-batch-ds-defect-broken" style="padding: 0.25rem;"></div>
+                <div class="form-group" style="margin-bottom:0;"><label style="font-size:0.75rem;">Упал коробки</label><input type="number" id="edit-batch-ds-defect-fell-box" style="padding: 0.25rem;"></div>
+                <div class="form-group" style="margin-bottom:0;"><label style="font-size:0.75rem;">Вмятина</label><input type="number" id="edit-batch-ds-defect-dent" style="padding: 0.25rem;"></div>
+                <div class="form-group" style="margin-bottom:0;"><label style="font-size:0.75rem;">Не соотв. толщ.</label><input type="number" id="edit-batch-ds-defect-thickness" style="padding: 0.25rem;"></div>
+                <div class="form-group" style="margin-bottom:0;"><label style="font-size:0.75rem;">Расслоение</label><input type="number" id="edit-batch-ds-defect-delamination" style="padding: 0.25rem;"></div>
+                <div class="form-group" style="margin-bottom:0;"><label style="font-size:0.75rem;">Кромка</label><input type="number" id="edit-batch-ds-defect-edge" style="padding: 0.25rem;"></div>
             </div>
 
             <h5>СКК (Результаты контроля)</h5>
-            <div class="form-grid" style="grid-template-columns: 1fr 1fr; gap: 0.5rem;">
-                <div class="form-group"><label>Годных</label><input type="number" id="edit-batch-qcd-first-grade"></div>
+            <div class="form-grid" style="grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem;">
+                <div class="form-group"><label>Кондиция</label><input type="number" id="edit-batch-qcd-condition"></div>
+                <div class="form-group"><label>1 сорт</label><input type="number" id="edit-batch-qcd-first-grade"></div>
                 <div class="form-group"><label>Брак</label><input type="number" id="edit-batch-qcd-defect"></div>
             </div>
 
@@ -562,12 +583,24 @@
 
     <!-- Edit Downtime Row Modal -->
     <div id="edit-downtime-modal" class="modal" style="z-index: 2010;">
-        <div class="modal-content" style="max-width: 500px;">
+        <div class="modal-content" style="max-width: 500px; max-height: 80vh; overflow-y: auto;">
             <h3>Редактировать простой</h3>
             <input type="hidden" id="edit-downtime-id">
-            <div class="form-group"><label>Время простоя</label><input type="text" id="edit-downtime-time"></div>
+            <div class="form-group"><label>Начало простоя</label><input type="text" id="edit-downtime-time"></div>
+            <div class="form-group"><label>Конец простоя</label><input type="text" id="edit-downtime-end-time"></div>
             <div class="form-group"><label>Длительность (мин)</label><input type="number" id="edit-downtime-duration"></div>
+            <div class="form-group"><label>Цех/Отдел</label><input type="text" id="edit-downtime-department"></div>
+            <div class="form-group"><label>Узел</label><input type="text" id="edit-downtime-node"></div>
             <div class="form-group"><label>Причина</label><input type="text" id="edit-downtime-reason"></div>
+            <div class="form-group"><label>Потери (тонн)</label><input type="number" id="edit-downtime-lost-tons" step="0.1"></div>
+            <div class="form-group"><label>Потери (тенге)</label><input type="number" id="edit-downtime-lost-tenge" step="0.1"></div>
+            <div class="form-group">
+                <label>Статус</label>
+                <select id="edit-downtime-status">
+                    <option value="pending">pending (В процессе)</option>
+                    <option value="resolved">resolved (Решено)</option>
+                </select>
+            </div>
             <div class="form-group">
                 <label>Категория</label>
                 <select id="edit-downtime-category">
@@ -583,6 +616,42 @@
                 <button onclick="saveDowntimeEdit()" class="btn-save">Сохранить</button>
             </div>
 
+        </div>
+    </div>
+
+    <!-- Edit Plan Board Modal -->
+    <div id="edit-plan-board-modal" class="modal" style="z-index: 2010;">
+        <div class="modal-content" style="max-width: 500px; max-height: 80vh; overflow-y: auto;">
+            <h3 id="plan-board-modal-title">Редактировать запись выработки</h3>
+            <input type="hidden" id="edit-pb-id">
+            <div class="form-group"><label>Дата (ГГГГ-ММ-ДД)</label><input type="date" id="edit-pb-date"></div>
+            <div class="form-group">
+                <label>Линия</label>
+                <select id="edit-pb-line">
+                    <option value="ЛФМ-1">ЛФМ-1</option>
+                    <option value="ЛФМ-2">ЛФМ-2</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Смена</label>
+                <select id="edit-pb-shift-name">
+                    <option value="День">День</option>
+                    <option value="Ночь">Ночь</option>
+                </select>
+            </div>
+            <div class="form-group"><label>Номер смены (Excel)</label><input type="number" id="edit-pb-shift-number"></div>
+            <div class="form-group">
+                <label>Мастер</label>
+                <select id="edit-pb-master"></select>
+            </div>
+            <div class="form-group"><label>План (листы)</label><input type="number" id="edit-pb-plan-sheets"></div>
+            <div class="form-group"><label>Факт (листы)</label><input type="number" id="edit-pb-fact-sheets"></div>
+            <div class="form-group"><label>1-й сорт</label><input type="number" id="edit-pb-first-grade"></div>
+            <div class="form-group"><label>Брак</label><input type="number" id="edit-pb-defect"></div>
+            <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
+                <button onclick="document.getElementById('edit-plan-board-modal').style.display='none'" style="background: transparent; border: 1px solid var(--glass-border);">Отмена</button>
+                <button onclick="savePlanBoardEdit()" class="btn-save">Сохранить</button>
+            </div>
         </div>
     </div>
 
