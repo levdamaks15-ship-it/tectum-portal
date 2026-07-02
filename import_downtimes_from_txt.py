@@ -12,9 +12,12 @@ def get_category(breakdown_name, node_name, dept_name):
     n_lower = node_name.lower()
     d_lower = dept_name.lower()
     
+    if "санитарный день" in b_lower or "санитарный день" in n_lower:
+        return "Санитарный день"
+        
     # Category rules
     # 1. ТО и ППР
-    if any(x in b_lower or x in n_lower for x in ["санитарный день", "ппр", "комплексное обслуживание", "то и ппр"]):
+    if any(x in b_lower or x in n_lower for x in ["ппр", "комплексное обслуживание", "то и ппр"]):
         return "ТО и ППР"
         
     # 2. Энергетические

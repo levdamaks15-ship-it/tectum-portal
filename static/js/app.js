@@ -9,19 +9,6 @@ let chartDtCategory = null;
 let chartDtNodes = null;
 let chartDailySheets = null;
 let chartDailyTons = null;
-// Multipliers: stacks to sheets
-const PRODUCT_MULTIPLIERS = {
-    "Шифер 7 волн": 100,
-    "Шифер 7 волн 3500*980": 100,
-    "Шифер 8 волн": 100,
-    "Шифер 8 волн глад": 100,
-    "Шифер 8 волн пиленый": 100,
-    "Шифер плоский 10 мм": 50,
-    "Шифер плоский 8 мм": 60,
-    "Шифер плоский 6 мм": 80,
-    "Шифер РП 1750*930": 100
-};
-
 // defect names map
 const DEFECT_NAMES = {
     ds_defect_chip: "Скол",
@@ -133,13 +120,14 @@ async function init() {
     
     const roleOrder = {
         'director': 1,
-        'master': 2,
-        'zo': 3,
-        'lfm': 4,
-        'stacker': 5,
-        'destacker': 6,
-        'qcd': 7,
-        'mechanic': 8
+        'technologist': 2,
+        'master': 3,
+        'zo': 4,
+        'lfm': 5,
+        'stacker': 6,
+        'destacker': 7,
+        'qcd': 8,
+        'mechanic': 9
     };
     
     masters.sort((a, b) => {
@@ -155,6 +143,7 @@ async function init() {
             let icon = '👤';
             if (m.role === 'admin') icon = '🛡️';
             if (m.role === 'director') icon = '👔';
+            if (m.role === 'technologist') icon = '🧑‍🔬';
             if (m.role === 'master') icon = '👷‍♂️';
             if (m.role === 'mechanic') icon = '🔧';
             if (m.role === 'qcd') icon = '🔍';
@@ -166,13 +155,14 @@ async function init() {
             switch(m.role) {
                 case 'admin': roleName = 'Администратор'; break;
                 case 'master': roleName = 'Мастер смены'; break;
-                case 'director': roleName = 'Руководство'; break;
+                case 'director': roleName = 'Технический директор'; break;
+                case 'technologist': roleName = 'Главный технолог'; break;
                 case 'zo': roleName = 'Оператор ЗО'; break;
                 case 'lfm': roleName = 'Машинист ЛФМ'; break;
                 case 'stacker': roleName = 'Стакер'; break;
                 case 'destacker': roleName = 'Дестакер'; break;
                 case 'qcd': roleName = 'Инспектор СКК'; break;
-                case 'mechanic': roleName = 'Механик'; break;
+                case 'mechanic': roleName = 'Главный механик'; break;
             }
 
             return `
@@ -277,7 +267,7 @@ function applyRoleVisibility() {
     if(btnWeekly) btnWeekly.style.display = 'none';
     if(btnPlanBoard) btnPlanBoard.style.display = 'none';
     
-    if (role === 'master' || role === 'director' || role === 'mechanic' || role === 'admin') {
+    if (role === 'master' || role === 'director' || role === 'technologist' || role === 'mechanic' || role === 'admin') {
         if(tabsMenu) tabsMenu.style.display = 'flex';
         
         if (role === 'admin') {
@@ -302,7 +292,7 @@ function applyRoleVisibility() {
             if(btnWeekly) btnWeekly.style.display = 'inline-block';
             if(btnPlanBoard) btnPlanBoard.style.display = 'inline-block';
             switchTab('dashboard');
-        } else if (role === 'director') {
+        } else if (role === 'director' || role === 'technologist') {
             if(btnDown) btnDown.style.display = 'inline-block';
             if(btnDash) btnDash.style.display = 'inline-block';
             if(btnMats) btnMats.style.display = 'inline-block';
@@ -322,7 +312,7 @@ function applyRoleVisibility() {
         switchTab('production');
     }
     
-    const isMechanicOrMaster = (role === 'master' || role === 'mechanic' || role === 'admin');
+    const isMechanicOrMaster = (role === 'master' || role === 'mechanic' || role === 'admin' || role === 'director' || role === 'technologist');
     const wrapEnd = document.getElementById('wrapper-dt-end');
     const wrapCat = document.getElementById('wrapper-dt-cat');
     if (wrapEnd) wrapEnd.style.display = isMechanicOrMaster ? 'block' : 'none';
@@ -356,6 +346,7 @@ function switchTab(tabId) {
     const daily = document.getElementById('daily-report-tab');
     const weekly = document.getElementById('weekly-report-tab');
     const planBoard = document.getElementById('plan-board-tab');
+    const analytics = document.getElementById('analytics-tab');
     
     if(prod) prod.style.display = 'none';
     if(receipt) receipt.style.display = 'none';
@@ -366,6 +357,7 @@ function switchTab(tabId) {
     if(daily) daily.style.display = 'none';
     if(weekly) weekly.style.display = 'none';
     if(planBoard) planBoard.style.display = 'none';
+    if(analytics) analytics.style.display = 'none';
     
     const target = document.getElementById(`${tabId}-tab`);
     if(target) {
@@ -395,6 +387,8 @@ function switchTab(tabId) {
         loadDailyReport();
     } else if (tabId === 'weekly-report') {
         loadWeeklyReport();
+    } else if (tabId === 'analytics') {
+        initAnalyticsTab();
     }
 }
 
@@ -584,8 +578,9 @@ function applyShiftMode(shift) {
             const inputs = el.querySelectorAll('input, select, button');
             inputs.forEach(input => {
                 if(input.id !== 'btn-close-shift' && !input.classList.contains('tab-btn') && input.innerText !== 'Обновить' && !input.getAttribute('onclick')?.includes('switchTab')) {
-                     input.disabled = isClosed;
-                     if(isClosed) {
+                     const shouldDisable = (f === 'master-view') ? (shift && shift.status === 'closed') : isClosed;
+                     input.disabled = shouldDisable;
+                     if(shouldDisable) {
                          input.style.opacity = '0.5';
                          input.style.cursor = 'not-allowed';
                      } else {
@@ -870,6 +865,7 @@ async function addJournalDowntime() {
     const combinedNode = subnode ? `${node} - ${subnode}` : node;
     const breakdownSelect = document.getElementById(`journal-dt-breakdown`);
     const description = breakdownSelect.value === 'Другое' ? document.getElementById(`journal-dt-desc`).value : (breakdownSelect.value || document.getElementById(`journal-dt-desc`).value);
+    const is_equipment_downtime = document.getElementById('journal-dt-is-equipment-stop').checked;
     
     if (!start_time || !department || !node) return alert("Заполните обязательные поля (Время начала, Участок, Узел)");
     
@@ -878,14 +874,13 @@ async function addJournalDowntime() {
     await fetch(`/api/shifts/${activeShiftId}/downtimes`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ start_time, end_time, category, department, node: combinedNode, description, media_urls })
+        body: JSON.stringify({ start_time, end_time, category, department, node: combinedNode, description, media_urls, is_equipment_downtime })
     });
     alert("Простой зарегистрирован!");
     document.getElementById(`journal-dt-start`).value = '';
     document.getElementById(`journal-dt-end`).value = '';
     document.getElementById(`journal-dt-desc`).value = '';
-    document.getElementById(`downtime-media`).value = '';
-    document.getElementById('upload-status').style.display = 'none';
+    document.getElementById('journal-dt-is-equipment-stop').checked = true;
     
     // reset depts
     document.getElementById(`journal-dt-dept`).value = '';
@@ -922,14 +917,19 @@ function renderDowntimesTable(shift) {
             : '<span style="color:var(--success-color);">Закрыто</span>';
             
         let actionButtons = '';
-        if (currentUser && (currentUser.role === 'master' || currentUser.role === 'mechanic' || currentUser.role === 'director')) {
+        if (currentUser && (currentUser.role === 'master' || currentUser.role === 'mechanic' || currentUser.role === 'director' || currentUser.role === 'technologist' || currentUser.role === 'admin')) {
             actionButtons = `
                 <button onclick='openEditDowntimeModal(${dt.id})' style="width:auto; padding: 0.3rem 0.6rem; font-size:0.8rem; margin-bottom: 0.2rem; background: var(--primary-color);">Ред.</button>
                 <button onclick="deleteDowntime(${dt.id})" style="width:auto; padding: 0.3rem 0.6rem; font-size:0.8rem; background: var(--danger-color);">Удал.</button>
             `;
         }
         
+        let stopBadge = dt.is_equipment_downtime 
+            ? '<span style="display:inline-block; margin-top:3px; background:rgba(220,53,69,0.2); color:#ff6b6b; padding:2px 6px; border-radius:4px; font-size:0.75rem; font-weight:bold;">🛑 С остановкой</span>' 
+            : '<span style="display:inline-block; margin-top:3px; background:rgba(40,167,69,0.2); color:#28a745; padding:2px 6px; border-radius:4px; font-size:0.75rem; font-weight:bold;">⚡ Без остановки</span>';
+
         let dept_and_node = dt.department ? `${dt.department} / ${dt.node}` : dt.node;
+        dept_and_node += `<br>${stopBadge}`;
         
         return `
         <tr style="${dt.status === 'pending' ? 'background: rgba(255,165,0,0.1);' : ''}">
@@ -1211,6 +1211,7 @@ async function openEditDowntimeModal(id) {
     document.getElementById('edit-dt-id').value = dt.id;
     document.getElementById('edit-dt-start').value = dt.start_time;
     document.getElementById('edit-dt-end').value = dt.end_time || '';
+    document.getElementById('edit-dt-is-equipment-stop').checked = dt.is_equipment_downtime !== false;
 
     document.getElementById('edit-dt-desc').value = dt.description || '';
     
@@ -1234,13 +1235,14 @@ async function submitEditDowntime() {
     const combinedNode = subnode ? `${node} - ${subnode}` : node;
     const breakdownSelect = document.getElementById('edit-dt-breakdown');
     const description = breakdownSelect.value === 'Другое' ? document.getElementById('edit-dt-desc').value : (breakdownSelect.value || document.getElementById('edit-dt-desc').value);
+    const is_equipment_downtime = document.getElementById('edit-dt-is-equipment-stop').checked;
     
     if (!start_time || !end_time || !department || !node) return alert("Заполните обязательные поля (Время начала, Конец, Участок, Узел)");
     
     await fetch(`/api/downtimes/${id}`, {
         method: 'PUT',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ start_time, end_time, category, department, node: combinedNode, description })
+        body: JSON.stringify({ start_time, end_time, category, department, node: combinedNode, description, is_equipment_downtime })
     });
     
     closeEditDowntimeModal();
@@ -1360,14 +1362,13 @@ function renderSummaryTable(shift) {
         <tr>
             <th>Партия</th>
             <th>Продукция</th>
-            <th>Стакер (стопы)</th>
-            <th>Стакер (листы)</th>
+            <th>Стакер (листов)</th>
             <th colspan="3" style="text-align:center; border-left: 2px solid var(--glass-border);">Дестакер</th>
             ${activeDefects.size > 0 ? `<th colspan="${activeDefects.size}" style="text-align:center; border-left: 1px solid var(--glass-border);">Детализация брака (Дестакер)</th>` : ''}
             <th colspan="3" style="text-align:center; border-left: 2px solid var(--glass-border);">СКК</th>
         </tr>
         <tr>
-            <th></th><th></th><th></th><th></th>
+            <th></th><th></th><th></th>
             <th style="border-left: 2px solid var(--glass-border);">Конд.</th><th>1 Сорт</th><th>Брак</th>
             ${defectHeaders}
             <th style="border-left: 2px solid var(--glass-border);">Конд.</th><th>1 Сорт</th><th>Брак</th>
@@ -1378,9 +1379,6 @@ function renderSummaryTable(shift) {
     
     let rows = '';
     batches.forEach(b => {
-        const mult = PRODUCT_MULTIPLIERS[b.product_name] || 100;
-        const calcSheets = b.stacked_stacks * mult;
-        
         let defectCols = Array.from(activeDefects).map(k => `<td>${b[k] || 0}</td>`).join('');
         
         // Разница Разборщик vs СКК (проверка)
@@ -1392,7 +1390,6 @@ function renderSummaryTable(shift) {
                 <td>${b.batch_number}</td>
                 <td>${b.product_name}</td>
                 <td>${b.stacked_stacks}</td>
-                <td>${calcSheets}</td>
                 <td style="border-left: 2px solid var(--glass-border);">${b.ds_condition}</td>
                 <td>${b.ds_first_grade}</td>
                 <td><strong>${b.ds_defect}</strong></td>
@@ -2726,6 +2723,203 @@ async function clearPlanBoard() {
     } catch (e) {
         console.error(e);
         alert("Сетевая ошибка при отправке запроса");
+    }
+}
+
+// --- ANALYTICS TAB LOGIC ---
+let chartAnalyticsTrend = null;
+let chartAnalyticsCategories = null;
+let chartAnalyticsBottlenecks = null;
+
+async function initAnalyticsTab() {
+    // 1. Populate dates if empty
+    const startInput = document.getElementById('analytics-start-date');
+    const endInput = document.getElementById('analytics-end-date');
+    
+    if (startInput && !startInput.value) {
+        const now = new Date();
+        // Start of current month
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const offset = startOfMonth.getTimezoneOffset();
+        const localStart = new Date(startOfMonth.getTime() - (offset*60*1000));
+        startInput.value = localStart.toISOString().split('T')[0];
+    }
+    
+    if (endInput && !endInput.value) {
+        const now = new Date();
+        const offset = now.getTimezoneOffset();
+        const localNow = new Date(now.getTime() - (offset*60*1000));
+        endInput.value = localNow.toISOString().split('T')[0];
+    }
+    
+    // 2. Populate departments list
+    try {
+        const res = await fetch('/api/downtimes/directory/departments');
+        const depts = await res.json();
+        const select = document.getElementById('analytics-dept');
+        if (select) {
+            const currentValue = select.value;
+            select.innerHTML = '<option value="">-- Все участки --</option>' + 
+                depts.map(d => `<option value="${d}">${d}</option>`).join('');
+            select.value = currentValue;
+        }
+    } catch(e) {
+        console.error("Failed to load departments for analytics", e);
+    }
+    
+    // 3. Load initial analytics data
+    await loadAnalyticsData();
+}
+
+async function loadAnalyticsData() {
+    const start_date = document.getElementById('analytics-start-date').value;
+    const end_date = document.getElementById('analytics-end-date').value;
+    const department = document.getElementById('analytics-dept').value;
+    
+    let url = `/api/dashboard/analytics_data?`;
+    if (start_date) url += `start_date=${start_date}&`;
+    if (end_date) url += `end_date=${end_date}&`;
+    if (department) url += `department=${encodeURIComponent(department)}&`;
+    
+    try {
+        const res = await fetch(url);
+        const data = await res.json();
+        
+        // 1. Update KPI cards
+        const stopMin = document.getElementById('analytics-kpi-stop-min');
+        const stopCount = document.getElementById('analytics-kpi-stop-count');
+        const stopTons = document.getElementById('analytics-kpi-stop-tons');
+        const stopTenge = document.getElementById('analytics-kpi-stop-tenge');
+        
+        const nonstopMin = document.getElementById('analytics-kpi-nonstop-min');
+        const nonstopCount = document.getElementById('analytics-kpi-nonstop-count');
+        const nonstopTons = document.getElementById('analytics-kpi-nonstop-tons');
+        const nonstopTenge = document.getElementById('analytics-kpi-nonstop-tenge');
+        
+        if (stopMin) stopMin.innerText = `${data.kpis.with_stop.duration} мин`;
+        if (stopCount) stopCount.innerText = data.kpis.with_stop.count;
+        if (stopTons) stopTons.innerText = `${data.kpis.with_stop.lost_tons.toFixed(1)} т`;
+        if (stopTenge) stopTenge.innerText = `${data.kpis.with_stop.lost_tenge.toLocaleString()} ₸`;
+        
+        if (nonstopMin) nonstopMin.innerText = `${data.kpis.without_stop.duration} мин`;
+        if (nonstopCount) nonstopCount.innerText = data.kpis.without_stop.count;
+        if (nonstopTons) nonstopTons.innerText = `${data.kpis.without_stop.lost_tons.toFixed(1)} т`;
+        if (nonstopTenge) nonstopTenge.innerText = `${data.kpis.without_stop.lost_tenge.toLocaleString()} ₸`;
+        
+        // 2. Destroy old charts if they exist
+        if (chartAnalyticsTrend) chartAnalyticsTrend.destroy();
+        if (chartAnalyticsCategories) chartAnalyticsCategories.destroy();
+        if (chartAnalyticsBottlenecks) chartAnalyticsBottlenecks.destroy();
+        
+        const categoryColors = {
+            'Механические': 'rgba(40, 167, 69, 0.8)',
+            'Технологические': 'rgba(23, 162, 184, 0.8)',
+            'Энергетические': 'rgba(255, 193, 7, 0.8)',
+            'ТО и ППР': 'rgba(111, 66, 193, 0.8)',
+            'Санитарный день': 'rgba(220, 53, 69, 0.8)',
+            'Остановки не связанные с простоем оборудования': 'rgba(108, 117, 125, 0.8)'
+        };
+        const defaultColor = 'rgba(255, 255, 255, 0.5)';
+        
+        // --- 2.1 Trend Chart ---
+        const trendDates = Object.keys(data.trend);
+        const trendCats = new Set();
+        trendDates.forEach(d => {
+            Object.keys(data.trend[d]).forEach(c => trendCats.add(c));
+        });
+        
+        const trendDatasets = Array.from(trendCats).map(cat => {
+            const dataPoints = trendDates.map(d => data.trend[d][cat] || 0);
+            return {
+                label: cat,
+                data: dataPoints,
+                borderColor: categoryColors[cat] || defaultColor,
+                backgroundColor: categoryColors[cat] ? categoryColors[cat].replace('0.8', '0.1') : 'rgba(255, 255, 255, 0.1)',
+                borderWidth: 2,
+                fill: false,
+                tension: 0.1
+            };
+        });
+        
+        const ctxTrend = document.getElementById('chart-analytics-trend').getContext('2d');
+        chartAnalyticsTrend = new Chart(ctxTrend, {
+            type: 'line',
+            data: {
+                labels: trendDates,
+                datasets: trendDatasets
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { ticks: { color: '#ccc' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                    y: { ticks: { color: '#ccc' }, grid: { color: 'rgba(255,255,255,0.05)' } }
+                },
+                plugins: {
+                    legend: { labels: { color: '#fff' } }
+                }
+            }
+        });
+        
+        // --- 2.2 Category Chart ---
+        const catLabels = Object.keys(data.by_category);
+        const catStopData = catLabels.map(cat => data.by_category[cat].with_stop || 0);
+        const catBgColors = catLabels.map(cat => categoryColors[cat] || defaultColor);
+        
+        const ctxCats = document.getElementById('chart-analytics-categories').getContext('2d');
+        chartAnalyticsCategories = new Chart(ctxCats, {
+            type: 'doughnut',
+            data: {
+                labels: catLabels,
+                datasets: [{
+                    data: catStopData,
+                    backgroundColor: catBgColors,
+                    borderWidth: 1,
+                    borderColor: 'rgba(0,0,0,0.5)'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'right', labels: { color: '#fff', boxWidth: 12 } }
+                }
+            }
+        });
+        
+        // --- 2.3 Bottlenecks Chart ---
+        const bLabels = data.bottlenecks.map(b => b.node);
+        const bData = data.bottlenecks.map(b => b.duration);
+        
+        const ctxBottlenecks = document.getElementById('chart-analytics-bottlenecks').getContext('2d');
+        chartAnalyticsBottlenecks = new Chart(ctxBottlenecks, {
+            type: 'bar',
+            data: {
+                labels: bLabels,
+                datasets: [{
+                    label: 'Минут простоя с остановкой',
+                    data: bData,
+                    backgroundColor: 'rgba(220, 53, 69, 0.7)',
+                    borderColor: '#dc3545',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { ticks: { color: '#ccc' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                    y: { ticks: { color: '#ccc' }, grid: { color: 'rgba(255,255,255,0.05)' } }
+                },
+                plugins: {
+                    legend: { display: false }
+                }
+            }
+        });
+        
+    } catch(e) {
+        console.error("Failed to load analytics data", e);
     }
 }
 

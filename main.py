@@ -63,6 +63,13 @@ async def lifespan(app: FastAPI):
         conn.close()
     except: pass
 
+    try:
+        conn = sqlite3.connect("tectum.db")
+        conn.execute("ALTER TABLE downtimes ADD COLUMN is_equipment_downtime BOOLEAN DEFAULT 1")
+        conn.commit()
+        conn.close()
+    except: pass
+
     # Migrations for Shift (Asbocarton & Drains)
     try:
         conn = sqlite3.connect("tectum.db")
@@ -99,13 +106,16 @@ async def lifespan(app: FastAPI):
             db.add(models.Master(name="Стакер", pin="4444", role="stacker"))
             db.add(models.Master(name="Дестакер", pin="5555", role="destacker"))
             db.add(models.Master(name="Инспектор СКК", pin="6666", role="qcd"))
-            db.add(models.Master(name="Механик", pin="8888", role="mechanic"))
+            db.add(models.Master(name="Главный механик", pin="8888", role="mechanic"))
             db.commit()
         if not db.query(models.Master).filter(models.Master.role == "director").first():
-            db.add(models.Master(name="Директор", pin="7777", role="director"))
+            db.add(models.Master(name="Технический директор", pin="7777", role="director"))
             db.commit()
-        if not db.query(models.Master).filter(models.Master.role == "admin").first():
-            db.add(models.Master(name="Админ", pin="0000", role="admin"))
+        if not db.query(models.Master).filter(models.Master.role == "technologist").first():
+            db.add(models.Master(name="Главный технолог", pin="9999", role="technologist"))
+            db.commit()
+        if not db.query(models.Master).filter(models.Master.email == "admin@TectumEngineering.onmicrosoft.com").first():
+            db.add(models.Master(name="Tectum Engineering", pin="0000", role="admin", email="admin@TectumEngineering.onmicrosoft.com"))
             db.commit()
         
         # Auto-import downtimes directory if empty
@@ -168,11 +178,15 @@ def setup_demo_data(db: Session = Depends(get_db)):
         db.add(models.Master(name="Стакер", pin="4444", role="stacker"))
         db.add(models.Master(name="Дестакер", pin="5555", role="destacker"))
         db.add(models.Master(name="Инспектор СКК", pin="6666", role="qcd"))
-        db.add(models.Master(name="Механик", pin="8888", role="mechanic"))
+        db.add(models.Master(name="Главный механик", pin="8888", role="mechanic"))
         db.commit()
     
     if not db.query(models.Master).filter(models.Master.role == "director").first():
-        db.add(models.Master(name="Директор", pin="7777", role="director"))
+        db.add(models.Master(name="Технический директор", pin="7777", role="director"))
+        db.commit()
+
+    if not db.query(models.Master).filter(models.Master.role == "technologist").first():
+        db.add(models.Master(name="Главный технолог", pin="9999", role="technologist"))
         db.commit()
 
     return {"message": "Demo data loaded"}
@@ -740,6 +754,7 @@ def update_downtime(dt_id: int, data: schemas.DowntimeCreate, db: Session = Depe
     dt.node = data.node
     dt.description = data.description
     dt.media_urls = data.media_urls
+    dt.is_equipment_downtime = data.is_equipment_downtime
     dt.duration = duration
     dt.lost_tons = lost_tons
     dt.lost_tenge = lost_tenge
@@ -925,6 +940,107 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
             "by_category": dt_by_cat,
             "top_reasons": top_reasons
         }
+    }
+
+@app.get("/api/dashboard/analytics_data")
+def get_analytics_data(
+    start_date: str = None,
+    end_date: str = None,
+    department: str = None,
+    db: Session = Depends(get_db)
+):
+    query = db.query(models.Downtime).join(models.Shift)
+    
+    if start_date:
+        try:
+            sd = datetime.strptime(start_date, "%Y-%m-%d").date()
+            query = query.filter(models.Shift.date >= sd)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid start_date format. Use YYYY-MM-DD")
+            
+    if end_date:
+        try:
+            ed = datetime.strptime(end_date, "%Y-%m-%d").date()
+            query = query.filter(models.Shift.date <= ed)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid end_date format. Use YYYY-MM-DD")
+            
+    if department:
+        query = query.filter(models.Downtime.department == department)
+        
+    downtimes = query.all()
+    
+    duration_with_stop = 0
+    duration_without_stop = 0
+    lost_tons_with_stop = 0.0
+    lost_tons_without_stop = 0.0
+    lost_tenge_with_stop = 0.0
+    lost_tenge_without_stop = 0.0
+    count_with_stop = 0
+    count_without_stop = 0
+    
+    by_category = {}
+    node_durations = {}
+    trend_data = {}
+    
+    for dt in downtimes:
+        dur = dt.duration or 0
+        tons = dt.lost_tons or 0.0
+        tenge = dt.lost_tenge or 0.0
+        is_stop = bool(dt.is_equipment_downtime)
+        
+        if is_stop:
+            duration_with_stop += dur
+            lost_tons_with_stop += tons
+            lost_tenge_with_stop += tenge
+            count_with_stop += 1
+        else:
+            duration_without_stop += dur
+            lost_tons_without_stop += tons
+            lost_tenge_without_stop += tenge
+            count_without_stop += 1
+            
+        cat = dt.category or "Не указана"
+        if cat not in by_category:
+            by_category[cat] = {"with_stop": 0, "without_stop": 0}
+        if is_stop:
+            by_category[cat]["with_stop"] += dur
+        else:
+            by_category[cat]["without_stop"] += dur
+            
+        if is_stop and dt.node:
+            node_durations[dt.node] = node_durations.get(dt.node, 0) + dur
+            
+        shift_date = dt.shift.date
+        date_str = shift_date.strftime("%Y-%m-%d") if shift_date else "Не указана"
+        if date_str not in trend_data:
+            trend_data[date_str] = {}
+        trend_data[date_str][cat] = trend_data[date_str].get(cat, 0) + dur
+
+    bottlenecks = sorted([{"node": k, "duration": v} for k, v in node_durations.items()], key=lambda x: x['duration'], reverse=True)[:10]
+    
+    sorted_trend = {}
+    for d in sorted(trend_data.keys()):
+        sorted_trend[d] = trend_data[d]
+        
+    return {
+        "kpis": {
+            "with_stop": {
+                "duration": duration_with_stop,
+                "lost_tons": lost_tons_with_stop,
+                "lost_tenge": lost_tenge_with_stop,
+                "count": count_with_stop
+            },
+            "without_stop": {
+                "duration": duration_without_stop,
+                "lost_tons": lost_tons_without_stop,
+                "lost_tenge": lost_tenge_without_stop,
+                "count": count_without_stop
+            }
+        },
+        "by_category": by_category,
+        "bottlenecks": bottlenecks,
+        "trend": sorted_trend
     }
 
 # --- НОРМЫ РАСХОДА И ОТЧЕТ ПО СЫРЬЮ ---
@@ -1579,10 +1695,10 @@ def delete_master(master_id: int, request: Request, db: Session = Depends(get_db
 def check_admin_session(request: Request, db: Session):
     role = request.session.get("user_role")
     user_id = request.session.get("user_id")
-    if not user_id or role != "admin":
+    if not user_id or role not in ["admin", "director", "technologist"]:
         raise HTTPException(status_code=403, detail="Доступ запрещен. Требуются права администратора.")
     user = db.query(models.Master).get(user_id)
-    if not user or user.role != "admin":
+    if not user or user.role not in ["admin", "director", "technologist"]:
         raise HTTPException(status_code=403, detail="Доступ запрещен. Требуются права администратора.")
     return user
 

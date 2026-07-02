@@ -7,7 +7,7 @@ async function initAdminLogin() {
         const select = document.getElementById('admin-name');
         select.innerHTML = '';
         
-        const admins = masters.filter(m => m.role === 'admin' || m.role === 'director');
+        const admins = masters.filter(m => m.role === 'admin' || m.role === 'director' || m.role === 'technologist');
         admins.forEach(a => {
             select.innerHTML += `<option value="${a.name}">${a.name} (${a.role})</option>`;
         });
@@ -30,7 +30,7 @@ async function adminLogin() {
 
         if (loginRes.ok) {
             const data = await loginRes.json();
-            if (data.role === 'admin' || data.role === 'director') {
+            if (data.role === 'admin' || data.role === 'director' || data.role === 'technologist') {
                 currentAdmin = data;
                 document.getElementById('admin-login-screen').style.display = 'none';
                 document.getElementById('admin-app').style.display = 'flex';
@@ -925,6 +925,7 @@ function editDowntimeRow(d) {
     document.getElementById('edit-downtime-lost-tenge').value = d.lost_tenge || 0;
     document.getElementById('edit-downtime-status').value = d.status || 'pending';
     document.getElementById('edit-downtime-category').value = d.category || 'Механические';
+    document.getElementById('edit-downtime-is-equipment-stop').checked = d.is_equipment_downtime !== false;
     document.getElementById('edit-downtime-modal').style.display = 'flex';
 }
 
@@ -940,7 +941,8 @@ async function saveDowntimeEdit() {
         lost_tons: parseFloat(document.getElementById('edit-downtime-lost-tons').value) || 0.0,
         lost_tenge: parseFloat(document.getElementById('edit-downtime-lost-tenge').value) || 0.0,
         status: document.getElementById('edit-downtime-status').value || 'pending',
-        category: document.getElementById('edit-downtime-category').value
+        category: document.getElementById('edit-downtime-category').value,
+        is_equipment_downtime: document.getElementById('edit-downtime-is-equipment-stop').checked
     };
     try {
         const res = await fetch(`/api/admin/downtimes/${id}`, {

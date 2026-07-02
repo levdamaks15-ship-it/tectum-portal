@@ -66,6 +66,7 @@ class DowntimeBase(BaseModel):
     description: str
     media_urls: Optional[str] = None
     status: Optional[str] = "pending"
+    is_equipment_downtime: Optional[bool] = True
 
 class DowntimeCreate(DowntimeBase):
     pass

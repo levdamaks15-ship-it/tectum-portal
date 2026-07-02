@@ -262,14 +262,15 @@
                 <label>Роль</label>
                 <select id="master-role">
                     <option value="admin">admin (Администратор)</option>
-                    <option value="director">director (Директор)</option>
+                    <option value="director">director (Технический директор)</option>
+                    <option value="technologist">technologist (Главный технолог)</option>
                     <option value="master">master (Мастер смены)</option>
                     <option value="zo">zo (Оператор ЗО)</option>
                     <option value="lfm">lfm (Машинист ЛФМ)</option>
                     <option value="stacker">stacker (Стакер)</option>
                     <option value="destacker">destacker (Дестакер)</option>
                     <option value="qcd">qcd (Инспектор СКК)</option>
-                    <option value="mechanic">mechanic (Механик)</option>
+                    <option value="mechanic">mechanic (Главный механик)</option>
                 </select>
             </div>
             <div style="display: flex; gap: 1rem; margin-top: 2rem;">
@@ -304,6 +305,7 @@
                     <option value="Технологические">Технологические</option>
                     <option value="ТО и ППР">ТО и ППР</option>
                     <option value="Остановки не связанные с простоем оборудования">Остановки не связанные с простоем оборудования</option>
+                    <option value="Санитарный день">Санитарный день</option>
                 </select>
             </div>
             <div class="form-group">
@@ -543,7 +545,7 @@
             <input type="hidden" id="edit-batch-id">
             <div class="form-group"><label>Номер партии</label><input type="text" id="edit-batch-number"></div>
             <div class="form-group"><label>Продукт</label><input type="text" id="edit-batch-product"></div>
-            <div class="form-group"><label>Разобранных стоп</label><input type="number" id="edit-batch-stacked-stacks"></div>
+            <div class="form-group"><label>Общее количество (Стакер)</label><input type="number" id="edit-batch-stacked-stacks"></div>
             
             <h5>Дестакер (Данные разборки)</h5>
             <div class="form-grid" style="grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem;">
@@ -609,7 +611,12 @@
                     <option value="Технологические">Технологические</option>
                     <option value="ТО и ППР">ТО и ППР</option>
                     <option value="Остановки не связанные с простоем оборудования">Остановки не связанные с простоем оборудования</option>
+                    <option value="Санитарный день">Санитарный день</option>
                 </select>
+            </div>
+            <div class="form-group" style="display: flex; align-items: center; gap: 0.5rem; margin-top: 1rem; cursor: pointer;">
+                <input type="checkbox" id="edit-downtime-is-equipment-stop" style="width: auto; margin: 0;">
+                <label style="margin: 0; cursor: pointer;">Ремонт с остановкой оборудования</label>
             </div>
             <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
                 <button onclick="document.getElementById('edit-downtime-modal').style.display='none'" style="background: transparent; border: 1px solid var(--glass-border);">Отмена</button>
